@@ -1,4 +1,5 @@
 from os.path import isfile
+from unicodedata import name
 import discord
 from discord.ext import commands
 import os
@@ -55,6 +56,7 @@ class Music(commands.Cog):
         self.now_playing_message = None
         self.song_start_time = None
         self.song_duration = None
+        self.message_channel = None
 
     def get_current_song(self):
         return self.queue.current_song()
@@ -101,88 +103,137 @@ class Music(commands.Cog):
 
     async def destroy_now_playing_message(self):
         if self.now_playing_message:
-            await self.now_playing_message.delete()
-            self.now_playing_message = None
+            try:
+                await self.now_playing_message.delete()
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:
+                    pass
+                else:
+                    raise e
+            finally:
+                self.now_playing_message = None
 
     async def play_next_song(self, ctx):
         print(f"Queue from play_next_song: {self.queue.queue}")
-        await self.destroy_now_playing_message()
-        current_song = None
-        if self.get_current_song():
-            if (
-                self.loop_type == "all"
-                and self.queue.current_index == len(self.queue.queue) - 1
-            ):
-                self.queue.current_index = 0
-                current_song = self.get_current_song()
-            elif self.loop_type == "once":
-                current_song = self.get_current_song()
-            else:
-                current_song = self.queue.next_song()
-
-        if current_song:
-            self.song_start_time = time.time()
-            self.song_duration = self.get_song_duration(current_song)
-
-            if ctx.voice_client is None:
-                voice_channel = ctx.author.voice.channel
-                vc = await voice_channel.connect()
-            else:
-                vc = ctx.voice_client
-            if vc.is_playing():
-                vc.stop()
-            vc.play(
-                discord.FFmpegPCMAudio(current_song),
-                after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
-            )
-            await self.create_now_playing_message(ctx)
-        else:
-            if ctx.voice_client:
+        try:
+            await self.destroy_now_playing_message()
+            current_song = None
+            if self.get_current_song():
                 if (
-                    not ctx.voice_client.is_playing()
-                    and not ctx.voice_client.is_paused()
+                    self.loop_type == "all"
+                    and self.queue.current_index == len(self.queue.queue) - 1
                 ):
-                    await ctx.voice_client.disconnect()
+                    self.queue.current_index = 0
+                    current_song = self.get_current_song()
+                elif self.loop_type == "once":
+                    current_song = self.get_current_song()
+                else:
+                    current_song = self.queue.next_song()
+
+            if current_song:
+                self.song_start_time = time.time()
+                self.song_duration = self.get_song_duration(current_song)
+
+                if ctx.voice_client is None:
+                    voice_channel = ctx.author.voice.channel
+                    vc = await voice_channel.connect()
+                else:
+                    vc = ctx.voice_client
+                if vc.is_playing():
+                    vc.stop()
+                vc.play(
+                    discord.FFmpegPCMAudio(current_song),
+                    after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                )
+                await self.create_now_playing_message(ctx)
             else:
-                print("The bot is not connected to a voice channel.")
+                if ctx.voice_client:
+                    if (
+                        not ctx.voice_client.is_playing()
+                        and not ctx.voice_client.is_paused()
+                    ):
+                        await ctx.voice_client.disconnect()
+                else:
+                    print("The bot is not connected to a voice channel.")
+        except Exception as e:
+            print(f"Error in play_next_song: {e}")
+            if current_song and ctx.voice_client:
+                ctx.voice_client.play(
+                    discord.FFmpegPCMAudio(current_song),
+                    after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                )
 
     async def create_now_playing_message(self, ctx):
-        print(f"current_song: {self.get_current_song()}")
-        if self.get_current_song():
-            audio = ID3(self.get_current_song())
-            song_title = audio.get("TIT2", "Unknown Title")
-        else:
-            song_title = self.get_current_song()
-        queue_length = len(self.queue.queue) - (self.queue.current_index + 1)
-        embed = discord.Embed(title="Now playing", color=discord.Color.blue())
-        embed.add_field(name="Song", value=song_title, inline=False)
-        embed.add_field(
-            name="Progress", value=self.create_progress_bar(0), inline=False
-        )
-        embed.set_footer(text=f"0s / {int(self.song_duration)}s")
-        embed.add_field(name="Songs in queue", value=queue_length)
-        self.now_playing_message = await ctx.respond(embed=embed)
-        await self.update_now_playing(ctx)
+        try:
+            self.message_channel = ctx.channel
+            print(f"current_song: {self.get_current_song()}")
+            if self.get_current_song():
+                audio = ID3(self.get_current_song())
+                song_title = audio.get("TIT2", "Unknown Title")
+            else:
+                song_title = self.get_current_song()
+            queue_length = len(self.queue.queue) - (self.queue.current_index + 1)
+            embed = discord.Embed(title="Now playing", color=discord.Color.blue())
+            embed.add_field(name="Song", value=song_title, inline=False)
+            embed.add_field(
+                name="Progress", value=self.create_progress_bar(0), inline=False
+            )
+            embed.set_footer(text=f"0s / {int(self.song_duration)}s")
+            embed.add_field(name="Songs in queue", value=queue_length)
+
+            if hasattr(ctx, "responded") and ctx.responded:
+                self.now_playing_message = await self.message_channel.send(embed=embed)
+            else:
+                self.now_playing_message = await ctx.respond(embed=embed)
+
+            await self.update_now_playing(ctx)
+
+        except Exception as e:
+            print(f"Error in create_now_playing_message: {e}")
+            pass
 
     async def update_now_playing(self, ctx):
-        if self.get_current_song() and self.now_playing_message:
-            elapsed_time = time.time() - self.song_start_time
-            progress = elapsed_time / self.song_duration
-            queue_length = len(self.queue.queue) - self.queue.current_index - 1
-            embed = self.now_playing_message.embeds[0]
-            embed.set_field_at(
-                1,
-                name="Progress",
-                value=self.create_progress_bar(progress),
-                inline=False,
-            )
-            embed.set_field_at(2, name="Songs in queue", value=queue_length)
-            song_duration_MMSS = time.strftime("%M:%S", time.gmtime(self.song_duration))
-            elapsed_time_MMSS = time.strftime("%M:%S", time.gmtime(elapsed_time))
-            embed.set_footer(text=f"{elapsed_time_MMSS} / {song_duration_MMSS}")
-            await self.now_playing_message.edit(embed=embed)
-            await asyncio.sleep(7.5)
-            await self.update_now_playing(ctx)
+        if (
+            self.get_current_song()
+            and self.now_playing_message
+            and self.message_channel
+        ):
+            try:
+                elapsed_time = time.time() - self.song_start_time
+                progress = elapsed_time / self.song_duration
+                queue_length = len(self.queue.queue) - self.queue.current_index - 1
+                embed = discord.Embed(title="Now Playing", color=discord.Color.blue())
+                if self.get_current_song():
+                    audio = ID3(self.get_current_song())
+                    song_title = audio.get("TIT2", "Unknown Title")
+                    embed.add_field(name="Song", value=song_title, inline=False)
+                embed.add_field(
+                    name="Progress",
+                    value=self.create_progress_bar(progress),
+                    inline=False,
+                )
+                embed.add_field(name="Songs in queue", value=queue_length)
+
+                song_duration_MMSS = time.strftime(
+                    "%M:%S", time.gmtime(self.song_duration)
+                )
+                elapsed_time_MMSS = time.strftime("%M:%S", time.gmtime(elapsed_time))
+                embed.set_footer(text=f"{elapsed_time_MMSS} / {song_duration_MMSS}")
+                try:
+                    await self.now_playing_message.edit(embed=embed)
+                except discord.errors.HTTPException as e:
+                    if e.code == 50027:
+                        await self.destroy_now_playing_message()
+                        self.now_playing_message = await self.message_channel.send(
+                            embed=embed
+                        )
+                    else:
+                        raise e
+                await asyncio.sleep(7.5)
+                await self.update_now_playing(ctx)
+            except Exception as e:
+                print(f"Error in update_now_playing: {e}")
+                pass
 
     def create_progress_bar(self, progress):
         total_blocks = 20
@@ -351,7 +402,7 @@ class Music(commands.Cog):
     @commands.slash_command(name="skip", description="Skip the current song.")
     async def skip(self, ctx: discord.ApplicationContext):
         if ctx.voice_client is None or not ctx.voice_client.is_playing():
-            await ctx.respond("No music playing.")
+            await ctx.respond("No music playing to be skipped.")
             return
 
         if self.queue.current_index < len(self.queue.queue) - 1:
@@ -491,9 +542,6 @@ class Music(commands.Cog):
             ]
         except IndexError:
             next_songs = self.queue.queue[self.queue.current_index :]
-        # next_song_titles = [
-        #     str(ID3(song).get("TIT2", "Unknown Title")) for song in next_songs
-        # ]
         next_song_titles = []
         for i in range(len(next_songs)):
             try:
