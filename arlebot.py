@@ -25,6 +25,7 @@ extensions = [
     "cogs.utils",
     "cogs.music",
     "cogs.moderation",
+    "cogs.smashorpass",
 ]
 
 if __name__ == "__main__":
