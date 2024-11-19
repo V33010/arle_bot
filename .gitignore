@@ -11,4 +11,8 @@ backup/
 testsongs/
 vct/
 allsongs/
-testing/
+# testing/
+*.png
+*.PNG 
+*.json
+*.JSON
