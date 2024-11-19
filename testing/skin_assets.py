@@ -15,6 +15,10 @@ with open(filepath, "r") as file:
 current_directory = os.getcwd()
 
 
+def clean_display_name(display_name):
+    return "".join(c for c in display_name if c.isalnum())
+
+
 def download_image(url, save_path):
     try:
         # Send a GET request to the URL
@@ -49,53 +53,7 @@ gun_map = {
     "MP5": "Spectre",
     "Vector": "Stinger",
 }
-# asset = data["data"][2000]
-# assetPath = asset["assetPath"].split("/")
-# weapon_type = assetPath[3]
-# gun_category = ""
-# gun_type = ""
-# display_name = asset["displayName"]
-# internal_name = ""
-# url = ""
-# try:
-#     url = asset["fullRender"]
-# except KeyError:
-#     url = asset["displayIcon"]
-# print(display_name)
-# print(url)
-# if weapon_type == "Guns":
-#     gun_category = assetPath[4]
-#     gun_type = gun_map[assetPath[5]]
-#     internal_name = assetPath[6]
-#     print(f"gun_type: {gun_type}")
-#     print(f"gun_category: {gun_category}")
-#     print(f"internal_name: {internal_name}")
-#     pass
-# elif weapon_type == "Melee":
-#     gun_category = "Melee"
-#     gun_type = assetPath[4]
-#     internal_name = assetPath[4]
-#
-# if not url.endswith("."):
-#     print("sussy")
-#
-# savepath = rf"{gun_category}\{gun_type}"
-# fullpath = os.path.join(current_directory, savepath)
-# os.makedirs(fullpath, exist_ok=True)
-# json_file_name = internal_name
-# json_file_path = os.path.join(fullpath, f"{json_file_name}.json")
-# image_file_name = internal_name
-# image_file_path = os.path.join(fullpath, f"{image_file_name}.png")
-# download_image(url, image_file_path)
-# with open(json_file_path, "w") as file:
-#     json.dump(asset, file, indent=4)
-# print(json_file_path)
-# print(fullpath)
-# print(savepath)
-# print(asset)
-# print(assetPath)
-# print(weapon_type)
-# print(f'Total skinchromas: {len(data["data"])}')
+
 # ################################################################################
 assets = data["data"]
 for asset in assets:
@@ -104,6 +62,7 @@ for asset in assets:
     gun_category = ""
     gun_type = ""
     display_name = asset["displayName"]
+    cleaned_display_name = clean_display_name(display_name)
     internal_name = ""
     url = ""
     savepath = ""
@@ -117,7 +76,7 @@ for asset in assets:
     if weapon_type == "Guns":
         gun_category = assetPath[4]
         gun_type = gun_map[assetPath[5]]
-        internal_name = assetPath[6]
+        internal_name = assetPath[6] + cleaned_display_name
 
     elif weapon_type == "Melee":
         gun_category = "Melee"
