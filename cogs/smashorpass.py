@@ -64,6 +64,8 @@ class SmashOrPass(commands.Cog):
                 )
                 return
 
+            response_text = ""
+
             if interaction.custom_id == "smash":
                 response_text = "You smashed it!"
             elif interaction.custom_id == "pass":
