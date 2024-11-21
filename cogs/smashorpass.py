@@ -1,8 +1,10 @@
 import discord
+import json
 import os
 import random
 from discord.ui import Button, View
 from discord.ext import commands
+from PIL import Image
 
 images_folder_path = (
     r"C:\Vivek\coding\arleBot\smashorpass\skin_assets\skins\allskins_full"
@@ -38,9 +40,20 @@ class SmashOrPass(commands.Cog):
         async def send_new_image():
             """Send a new image with buttons and attach callbacks."""
             image_path = self.get_random_image()
+
             if image_path is None:
                 await ctx.send("No images available in the folder.")
                 return None
+
+            with Image.open(image_path) as img:
+                metadata = img.info.get("JSON_Metadata", None)
+            if metadata:
+                print("JSON metadata:")
+                print(metadata)
+
+            metadata = json.loads(metadata)
+            print(type(metadata))
+            display_name = metadata["displayName"]
 
             # Prepare the image file to send
             image = discord.File(image_path)
@@ -113,7 +126,7 @@ class SmashOrPass(commands.Cog):
 
             # Send the image with buttons
             if self.session_keys[user_id] == 1:
-                message = await ctx.send(file=image, view=view)
+                message = await ctx.send(content=display_name, file=image, view=view)
                 return message, view
             else:
                 return None, None
@@ -124,4 +137,3 @@ class SmashOrPass(commands.Cog):
 
 def setup(bot):
     bot.add_cog(SmashOrPass(bot))
-
