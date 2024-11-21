@@ -64,9 +64,13 @@ class SmashOrPass(commands.Cog):
                 )
                 return
 
-            # Respond with "sample text"
-            await interaction.response.send_message("sample text", ephemeral=True)
-
+            if interaction.custom_id == "smash":
+                response_text = "You smashed it!"
+            elif interaction.custom_id == "pass":
+                response_text = "You passed it!"
+            elif interaction.custom_id == "exit":
+                response_text = "You exited it!"
+            await interaction.response.send_message(response_text)
             # Disable all buttons
             for item in view.children:
                 if isinstance(item, Button):
