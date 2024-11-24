@@ -1,7 +1,6 @@
 # sample text
 import discord
 import subprocess
-import sys
 import os
 import asyncio
 from discord.commands import slash_command

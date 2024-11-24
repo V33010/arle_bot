@@ -1,5 +1,3 @@
-from os.path import isfile
-from unicodedata import name
 import discord
 from discord.ext import commands
 import os
@@ -8,7 +6,7 @@ import random
 import time
 import lyricsgenius
 from pydub import AudioSegment
-from mutagen.id3 import ID3, delete
+from mutagen.id3 import ID3
 from mutagen.mp3 import MP3
 
 
@@ -476,7 +474,7 @@ class Music(commands.Cog):
             await ctx.respond(f"Lyrics for **{song.title}** by **{song.artist}**")
             if len(song.lyrics) > 2000:
                 chunks = [
-                    song.lyrics[i : i + 2000] for i in range(0, len(songs.lyrics), 2000)
+                    song.lyrics[i : i + 2000] for i in range(0, len(song.lyrics), 2000)
                 ]
                 for chunk in chunks:
                     await ctx.send(chunk)

@@ -1,5 +1,4 @@
 import json
-from downloadscript import download_image
 
 filepath = "skinchromas.json"
 

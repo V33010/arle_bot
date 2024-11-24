@@ -1,9 +1,8 @@
 import requests
-from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
+# from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import os
 from dotenv import load_dotenv
@@ -82,53 +81,53 @@ def fetch_lyrics_page(url):
 
 ####
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
+# from selenium import webdriver
+# from selenium.webdriver.chrome.service import Service
+# from selenium.webdriver.common.by import By
+# from selenium.webdriver.chrome.options import Options
+# from selenium.webdriver.support.ui import WebDriverWait
+# from selenium.webdriver.support import expected_conditions as EC
+# import time
 
 
-def fetch_lyrics_page(title, genius_access_token):
-    """Fetches the lyrics page and stores the HTML content in a text file."""
-    search_url = get_lyrics_page_url(
-        title, genius_access_token
-    )  # Get the lyrics URL using the earlier method
-    if not search_url:
-        print("Lyrics URL not found.")
-        return
-
-    # Set up Chrome options for private browsing
-    chrome_options = Options()
-    chrome_options.add_argument("--incognito")
-
-    # Set up the Chrome WebDriver
-    service = Service("path/to/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-
-    try:
-        driver.get(search_url)
-
-        # Wait until the lyrics container is present
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, 'div[data-lyrics-container="true"]')
-            )
-        )
-
-        # Get the page source
-        page_source = driver.page_source
-
-        # Write the page source to a file
-        with open("page.txt", "w", encoding="utf-8") as file:
-            file.write(page_source)
-
-        print("Page saved to 'page.txt'.")
-
-    finally:
-        driver.quit()
+# def fetch_lyrics_page(title, genius_access_token):
+#     """Fetches the lyrics page and stores the HTML content in a text file."""
+#     search_url = get_lyrics_page_url(
+#         title, genius_access_token
+#     )  # Get the lyrics URL using the earlier method
+#     if not search_url:
+#         print("Lyrics URL not found.")
+#         return
+#
+#     # Set up Chrome options for private browsing
+#     chrome_options = Options()
+#     chrome_options.add_argument("--incognito")
+#
+#     # Set up the Chrome WebDriver
+#     service = Service("path/to/chromedriver")
+#     driver = webdriver.Chrome(service=service, options=chrome_options)
+#
+#     try:
+#         driver.get(search_url)
+#
+#         # Wait until the lyrics container is present
+#         WebDriverWait(driver, 10).until(
+#             EC.presence_of_element_located(
+#                 (By.CSS_SELECTOR, 'div[data-lyrics-container="true"]')
+#             )
+#         )
+#
+#         # Get the page source
+#         page_source = driver.page_source
+#
+#         # Write the page source to a file
+#         with open("page.txt", "w", encoding="utf-8") as file:
+#             file.write(page_source)
+#
+#         print("Page saved to 'page.txt'.")
+#
+#     finally:
+#         driver.quit()
 
 
 # Example usage
