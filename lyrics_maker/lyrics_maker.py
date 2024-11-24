@@ -81,7 +81,7 @@
 # update_lyrics(file_path, genius_access_token)
 
 
-from mutagen.id3 import ID3, TIT2, USLT
+from mutagen.id3 import ID3, USLT
 import requests
 from bs4 import BeautifulSoup
 import os

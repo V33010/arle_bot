@@ -1,7 +1,6 @@
 import discord
 import os
 import random
-import json
 from discord.ui import Button, View
 from discord.ext import commands
 
@@ -33,7 +32,7 @@ class SmashOrPass(commands.Cog):
             return
 
         # Prepare the image file to send
-        image = discord.File(image_path)
+        # image = discord.File(image_path)
 
         # Buttons: Smash, Pass, Exit
         smash_button = Button(
@@ -53,7 +52,7 @@ class SmashOrPass(commands.Cog):
         view.add_item(exit_button)
 
         # Send the image with buttons
-        message = await ctx.respond(file=image, view=view)
+        # message = await ctx.respond(file=image, view=view)
         original_user = ctx.user.id  # Store the user who initiated the session
 
         async def handle_interaction(interaction: discord.Interaction):
