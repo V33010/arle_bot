@@ -1,6 +1,10 @@
 import discord
+import warnings
+
 import os
 from dotenv import load_dotenv
+
+warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
 
 
 def clear_terminal():
