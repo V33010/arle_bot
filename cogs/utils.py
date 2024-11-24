@@ -1,8 +1,10 @@
+import platform
 import discord
 import subprocess
 import os
 from discord.commands import slash_command
 from discord.ext import commands
+from dependencies import utils
 
 
 class Ping(commands.Cog):
@@ -15,19 +17,20 @@ class Ping(commands.Cog):
         """Creates the permanent restart script"""
         cogs_dir = os.path.dirname(os.path.abspath(__file__))
         bot_dir = os.path.dirname(cogs_dir)
-        restart_path = os.path.join(bot_dir, "restart_bot.bat")
+        bot_path = os.path.join(bot_dir, "arlebot.py")
 
-        # Only create if it doesn't exist
-        if not os.path.exists(restart_path):
-            with open(restart_path, "w") as bat_file:
-                bat_file.write(
-                    f"""
-@echo off
-cd /d "{bot_dir}"
-timeout /t 2 /nobreak > nul
-python "{os.path.join(bot_dir, 'arleBot.py')}"
-"""
-                )
+        restart_path_win = os.path.join(bot_dir, "reboot_bot.bat")
+        restart_path_linux = os.path.join(bot_dir, "reboot_bot.sh")
+        restart_path = restart_path_linux
+
+        restart_file, platform = utils.get_restart_file(bot_dir, bot_path)
+
+        if platform == "Windows":
+            restart_path = restart_path_win
+
+            # Only create if it doesn't exist
+        with open(restart_path, "w") as exe_file:
+            exe_file.write(restart_file)
 
     @slash_command(name="ping", description="Return bot latency")
     async def ping(self, ctx: discord.ApplicationContext):
@@ -43,8 +46,12 @@ python "{os.path.join(bot_dir, 'arleBot.py')}"
             # Get paths
             cogs_dir = os.path.dirname(os.path.abspath(__file__))
             bot_dir = os.path.dirname(cogs_dir)
-            restart_path = os.path.join(bot_dir, "restart_bot.bat")
 
+            restart_path = os.path.join(bot_dir, "reboot_bot.bat")
+            if platform.system() == "Linux":
+                restart_path = os.path.join(bot_dir, "reboot_bot.sh")
+
+            utils.make_executable(restart_path)
             # Start the restart script
             subprocess.Popen([restart_path], shell=True, cwd=bot_dir)
 
