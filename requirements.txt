@@ -1,6 +1,0 @@
-py-cord
-python-dotenv
-lyricsgenius
-pydub
-mutagen
-PyNaCl
