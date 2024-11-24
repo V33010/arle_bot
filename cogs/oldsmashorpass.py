@@ -26,7 +26,9 @@ class SmashOrPass(commands.Cog):
         image_path = os.path.join(self.images_folder, image)
         with open(image_path, "rb") as img_file:
             # Assuming the image has JSON metadata embedded as a comment or separate
-            metadata = {}  # Fetch your JSON metadata from the image (you may need a library like PIL or similar)
+            metadata = (
+                {}
+            )  # Fetch your JSON metadata from the image (you may need a library like PIL or similar)
 
         return image_path, metadata
 

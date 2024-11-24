@@ -22,12 +22,14 @@ class Ping(commands.Cog):
         # Only create if it doesn't exist
         if not os.path.exists(restart_path):
             with open(restart_path, "w") as bat_file:
-                bat_file.write(f"""
+                bat_file.write(
+                    f"""
 @echo off
 cd /d "{bot_dir}"
 timeout /t 2 /nobreak > nul
 python "{os.path.join(bot_dir, 'arleBot.py')}"
-""")
+"""
+                )
 
     @slash_command(name="ping", description="Return bot latency")
     async def ping(self, ctx: discord.ApplicationContext):
@@ -60,4 +62,3 @@ python "{os.path.join(bot_dir, 'arleBot.py')}"
 
 def setup(bot):
     bot.add_cog(Ping(bot))
-
