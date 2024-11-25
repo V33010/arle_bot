@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.14.0",
     "beautifulsoup4>=4.12.3",
     "libsql-experimental>=0.0.41",
     "logfire[sqlalchemy]>=2.4.1",
