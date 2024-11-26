@@ -3,6 +3,10 @@ import platform
 import os
 
 
+def clear_terminal():
+    print("\033[H\033[J")
+
+
 def get_restart_file(bot_dir, path) -> (str, str):
     os_name = platform.system()
     print(os_name)
