@@ -1,5 +1,6 @@
-import requests
 import json
+
+import requests
 
 # API URL
 url = "https://valorant-api.com/v1/weapons/skinchromas"
