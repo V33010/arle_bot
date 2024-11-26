@@ -1,15 +1,18 @@
-import discord
+import os
 import warnings
 
-import os
+import discord
 from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
 
+
 def clear_terminal():
     print("\033[H\033[J")
 
+
 load_dotenv()
+
 clear_terminal()
 intents = discord.Intents().all()
 intents.message_content = True
