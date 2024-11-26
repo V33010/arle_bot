@@ -1,3 +1,4 @@
+config.toml
 .env
 arleBot.code-workspace
 spare.py

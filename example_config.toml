@@ -1,0 +1,27 @@
+# rename this file to config.toml to use with arle
+# config file for arle 
+
+title = "Arle bot"
+
+[arle]
+version = "0.0.0" 
+log_level = "debug"
+log_file = "arle.log"
+local_first = true # when this is false handle music playing and lyrics differently
+dev_mode = true
+
+[secrets]
+discord_token = ""
+genius_token = ""
+logfire_token = ""
+
+
+[database]
+
+[database.dev]
+database_url = "http://127.0.0.1:8080"
+database_auth_token = "" # no auth token required with turso for local development
+
+[database.prod]
+database_url = ""
+database_auth_token = ""

@@ -1,19 +1,25 @@
 import os
 import warnings
-
 import discord
-from dotenv import load_dotenv
+import tomllib
+from validators.config import ConfigValidator
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
+
+with open("config.toml", "rb") as f:
+    data = tomllib.load(f)
+
+arle_config: ConfigValidator = ConfigValidator.model_validate(data)
+print(arle_config.model_dump_json(indent=4))
+print("validated config file successfully")
 
 
 def clear_terminal():
     print("\033[H\033[J")
 
 
-load_dotenv()
+clear_terminal()  # TODO : review use of clear terminal and it's usefulness after logs are added
 
-clear_terminal()
 intents = discord.Intents().all()
 intents.message_content = True
 intents.members = True
@@ -38,5 +44,5 @@ if __name__ == "__main__":
         bot.load_extension(extension)
 
 
-bot.run(os.getenv("TOKEN"))
+bot.run(arle_config.secrets.discord_token)
 print("shutting down")
