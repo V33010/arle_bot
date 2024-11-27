@@ -1,6 +1,7 @@
 import json
 
 import requests
+from PIL import Image, PngImagePlugin
 
 
 def clean_display_name(display_name):
@@ -14,7 +15,7 @@ def download_image(url, save_path):
         with open(save_path, "wb") as file:
             file.write(response.content)
 
-        print(f"Image successfully saved: {save_path}")
+        # print(f"Image successfully saved: {save_path}", end="\r")
     except requests.exceptions.RequestException as e:
         print(f"Error occured: {e}")
 
@@ -67,3 +68,27 @@ def download_skinchromas():
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
     return
+
+
+def embed_json_in_png(json_path, png_path, output_path):
+    """Embed JSON content into the metadata of a PNG file."""
+    with open(json_path, "r") as json_file:
+        json_data = json.load(json_file)  # Load JSON content
+
+    with Image.open(png_path) as img:
+        meta = PngImagePlugin.PngInfo()
+        meta.add_text("JSON_Metadata", json.dumps(json_data))  # Add JSON metadata
+        img.save(output_path, "png", pnginfo=meta)  # Save new PNG
+
+
+def folders_to_process_list():
+    folders_to_process = [
+        "HvyMachineGuns",
+        "Melee",
+        "Rifles",
+        "Shotguns",
+        "Sidearms",
+        "SniperRifles",
+        "SubMachineGuns",
+    ]
+    return folders_to_process
