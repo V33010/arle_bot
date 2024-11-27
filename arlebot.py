@@ -3,7 +3,7 @@ import discord
 import warnings
 import tomllib
 from validators.config import ConfigValidator
-from dependencies.utils import clear_terminal
+from utils.reboot import clear_terminal
 
 start = timer()
 
