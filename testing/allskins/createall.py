@@ -70,8 +70,9 @@ def process_main_folders(base_path, folders):
 
 
 if __name__ == "__main__":
+    print("Main")
     # Get the current working directory
-    cwd = os.getcwd()
-
-    # Process the specified folders
-    process_main_folders(cwd, folders_to_process)
+    # cwd = os.getcwd()
+    #
+    # # Process the specified folders
+    # process_main_folders(cwd, folders_to_process)
