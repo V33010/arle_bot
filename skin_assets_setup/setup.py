@@ -16,9 +16,9 @@ def obtain_images(filepath):  # filepath to the "skinchromas.json"
     assets = data["data"]
     total_assets = len(assets)
     count = 0
+    actual = 0
     for asset in assets:
         count += 1
-        actual = 0
         print(f"Downloading image: [{count}/{total_assets}]", end="\r")
         assetPath = asset["assetPath"].split("/")
         weapon_type = assetPath[3]
@@ -93,7 +93,7 @@ def process_subsubfolder(subsubfolder_path):
         embed_json_in_png(json_file, png_file, output_path)
         # print(f"Created: {output_path}")
     else:
-        # print(f"Skipped {subsubfolder_path}: Missing JSON or PNG file.")
+        print(f"Skipped {subsubfolder_path}: Missing JSON or PNG file.")
 
 
 def process_main_folders(base_path, folders, total_assets):
@@ -112,7 +112,10 @@ def process_main_folders(base_path, folders, total_assets):
                         subsubfolder_path = os.path.join(subfolder_path, subsubfolder)
                         if os.path.isdir(subsubfolder_path):
                             count += 1
-                            print(f"Processing output PNGs: [{count}/{total_assets}]", end="\r")
+                            print(
+                                f"Processing output PNGs: [{count}/{total_assets}]",
+                                end="\r",
+                            )
                             process_subsubfolder(subsubfolder_path)
 
 
