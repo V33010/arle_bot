@@ -187,22 +187,3 @@ if __name__ == "__main__":
     process_main_folders(cwd, folders_to_process, total_assets)
     print("Copying items...")
     process_main_folders_copypasta(cwd, folders_to_process, total_assets)
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
