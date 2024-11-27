@@ -4,7 +4,7 @@ import subprocess
 import os
 from discord.commands import slash_command
 from discord.ext import commands
-from dependencies import utils
+from utils import reboot
 
 
 class Ping(commands.Cog):
@@ -23,7 +23,7 @@ class Ping(commands.Cog):
         restart_path_linux = os.path.join(bot_dir, "reboot_bot.sh")
         restart_path = restart_path_linux
 
-        restart_file, platform = utils.get_restart_file(bot_dir, bot_path)
+        restart_file, platform = reboot.get_restart_file(bot_dir, bot_path)
 
         if platform == "Windows":
             restart_path = restart_path_win
@@ -51,7 +51,7 @@ class Ping(commands.Cog):
             if platform.system() == "Linux":
                 restart_path = os.path.join(bot_dir, "reboot_bot.sh")
 
-            utils.make_executable(restart_path)
+            reboot.make_executable(restart_path)
             # Start the restart script
             subprocess.Popen([restart_path], shell=True, cwd=bot_dir)
 

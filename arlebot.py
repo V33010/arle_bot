@@ -27,7 +27,7 @@ async def on_ready():
 
 
 extensions = [
-    "cogs.utils",
+    "cogs.discord-utils",
     "cogs.music",
     "cogs.moderation",
     "cogs.smashorpass",
