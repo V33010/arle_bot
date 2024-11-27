@@ -49,7 +49,8 @@ def obtain_images(filepath):  # filepath to the "skinchromas.json"
         else:
             print("New weapon type found!")
 
-        savepath = rf"{gun_category}\{gun_type}\{internal_name}"
+        # savepath = rf"{gun_category}\{gun_type}\{internal_name}"
+        savepath = os.path.join(gun_category,gun_type,internal_name)
         fullpath = os.path.join(current_directory, savepath)
         os.makedirs(fullpath, exist_ok=True)
         json_file_name = internal_name
