@@ -6,13 +6,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.12.3",
+    "libsql-experimental>=0.0.41",
+    "logfire[sqlalchemy]>=2.4.1",
     "lyricsgenius>=3.0.1",
     "mutagen>=1.47.0",
     "pillow>=11.0.0",
     "py-cord>=2.6.1",
+    "pydantic>=2.10.1",
     "pydub>=0.25.1",
     "pynacl>=1.5.0",
-    "python-dotenv>=1.0.1",
     "requests>=2.32.3",
     "selenium>=4.26.1",
 ]
