@@ -9,9 +9,7 @@ from PIL import Image
 images_folder_path = os.path.join(
     os.path.dirname(__file__),
     "..",
-    "smashorpass",
-    "skin_assets",
-    "skins",
+    "skin_assets_setup",
     "allskins_full",
 )
 
