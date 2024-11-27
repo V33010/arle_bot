@@ -1,7 +1,7 @@
-import discord
+import os
 import warnings
 
-import os
+import discord
 from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
@@ -12,6 +12,7 @@ def clear_terminal():
 
 
 load_dotenv()
+
 clear_terminal()
 intents = discord.Intents().all()
 intents.message_content = True
@@ -26,7 +27,7 @@ async def on_ready():
 
 
 extensions = [
-    "cogs.utils",
+    "cogs.discord-utils",
     "cogs.music",
     "cogs.moderation",
     "cogs.smashorpass",
