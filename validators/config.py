@@ -22,11 +22,13 @@ class arleSecrets(CustomBaseModel):
 
 
 class devDb(CustomBaseModel):
-    database_url: HttpUrl | None
+    name: str
+    database_url: HttpUrl | None | str
     database_auth_token: str | None
 
 
 class prodDb(CustomBaseModel):
+    name: str
     database_url: str | None
     database_auth_token: str | None
 
@@ -37,7 +39,7 @@ class prodDb(CustomBaseModel):
             raise ValueError(
                 "Need production database url when bot is not running in dev mode"
             )
-            return v
+        return v
 
     @field_validator("database_auth_token")
     def val_db_auth_token(cls, v: str | None, info: ValidationInfo):
@@ -46,7 +48,7 @@ class prodDb(CustomBaseModel):
             raise ValueError(
                 "Need production database auth token when bot is not running in dev mode"
             )
-            return v
+        return v
 
 
 class databaseSecrets(CustomBaseModel):

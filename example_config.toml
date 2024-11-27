@@ -19,9 +19,11 @@ logfire_token = ""
 [database]
 
 [database.dev]
+name = "dev.db"
 database_url = "http://127.0.0.1:8080"
 database_auth_token = "" # no auth token required with turso for local development
 
 [database.prod]
+name = "prod.db"
 database_url = ""
 database_auth_token = ""
