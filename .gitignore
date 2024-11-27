@@ -1,3 +1,5 @@
+dev.db*
+prod.db*
 config.toml
 .env
 arleBot.code-workspace
