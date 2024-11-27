@@ -6,9 +6,16 @@ from discord.ui import Button, View
 from discord.ext import commands
 from PIL import Image
 
-images_folder_path = (
-    r"C:\Vivek\coding\arleBot\smashorpass\skin_assets\skins\allskins_full"
+images_folder_path = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "smashorpass",
+    "skin_assets",
+    "skins",
+    "allskins_full",
 )
+
+images_folder_path = os.path.abspath(images_folder_path)
 
 
 class SmashOrPass(commands.Cog):
