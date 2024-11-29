@@ -7,10 +7,7 @@ from discord.ext import commands
 from PIL import Image
 
 images_folder_path = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "skin_assets_setup",
-    "allskins_full",
+    os.path.dirname(__file__), "..", "skin_assets", "allskins_full"
 )
 
 images_folder_path = os.path.abspath(images_folder_path)
