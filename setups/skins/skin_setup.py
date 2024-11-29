@@ -1,3 +1,4 @@
+# this downloads the skins locally on the server
 import shutil
 import json
 import os
