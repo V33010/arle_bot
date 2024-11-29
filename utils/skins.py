@@ -1,4 +1,5 @@
 import json
+import os
 
 import requests
 from PIL import Image, PngImagePlugin
@@ -44,7 +45,7 @@ def gun_map():
     return map
 
 
-def download_skinchromas():
+def download_skinchromas(file_path: str):
     # API URL
     url = "https://valorant-api.com/v1/weapons/skinchromas"
 
@@ -60,10 +61,10 @@ def download_skinchromas():
         data = response.json()
 
         # Save to a file
-        with open("skinchromas.json", "w", encoding="utf-8") as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
 
-        print("Data saved to skinchromas.json")
+        print("Data saved to skin_assets/skinchromas.json")
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
@@ -92,3 +93,11 @@ def folders_to_process_list():
         "SubMachineGuns",
     ]
     return folders_to_process
+
+
+def extract_json_embed():
+    with Image.open(r"allskins_full/output_809.png") as img:
+        metadata = img.info
+        if "JSON_Metadata" in metadata:
+            print("Extracted JSON Metadata:")
+            print(metadata["JSON_Metadata"])

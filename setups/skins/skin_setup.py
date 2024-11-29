@@ -1,8 +1,8 @@
 import shutil
 import json
 import os
-import helper
-from helper import clean_display_name, download_image, embed_json_in_png
+import utils.skins as helper
+from utils.skins import clean_display_name, download_image, embed_json_in_png
 
 
 def obtain_images(filepath):  # filepath to the "skinchromas.json"
@@ -50,7 +50,7 @@ def obtain_images(filepath):  # filepath to the "skinchromas.json"
             print("New weapon type found!")
 
         # savepath = rf"{gun_category}\{gun_type}\{internal_name}"
-        savepath = os.path.join(gun_category,gun_type,internal_name)
+        savepath = os.path.join("skin_assets", gun_category, gun_type, internal_name)
         fullpath = os.path.join(current_directory, savepath)
         os.makedirs(fullpath, exist_ok=True)
         json_file_name = internal_name
@@ -60,7 +60,7 @@ def obtain_images(filepath):  # filepath to the "skinchromas.json"
         try:
             download_image(url, image_file_path)
             actual += 1
-        except Exception as e:
+        except Exception:
             error_urls.append(url)
         with open(json_file_path, "w") as file:
             json.dump(asset, file, indent=4)
@@ -120,12 +120,12 @@ def process_main_folders(base_path, folders, total_assets):
                             process_subsubfolder(subsubfolder_path)
 
 
-# Define the destination folder
-destination_folder = "allskins_full"
+dir_name = "skin_assets/allskins_full"
 
-# Create destination folder if it doesn't exist
-if not os.path.exists(destination_folder):
-    os.makedirs(destination_folder)
+if not os.path.exists(dir_name):
+    os.makedirs(dir_name)
+# Define the destination folder
+destination_folder = "skin_assets/allskins_full"
 
 
 def copy_output_pngs(subsubfolder_path):
@@ -170,21 +170,32 @@ def process_main_folders_copypasta(base_path, folders, total_assets):
                             process_subsubfolder_copypasta(subsubfolder_path)
 
 
-if __name__ == "__main__":
+def run_setup():
     cwd = os.getcwd()
-    if not os.path.exists("skinchromas.json"):
-        print(f"skinchromas.json does not exist.\nDownloading...")
-        helper.download_skinchromas()
+
+    dir_name = "skin_assets"
+
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    json_file_name = "skinchromas.json"
+    json_file_path = os.path.join(dir_name, json_file_name)
+
+    if not os.path.exists(json_file_path):
+        print("skinchromas.json does not exist.\nDownloading...")
+        helper.download_skinchromas(json_file_path)
     else:
         print("skinchromas.json already exists.")
-    filepath = "skinchromas.json"
-    print(f"Starting download...")
+
+    filepath = json_file_path
+    print("Starting download...")
     total_assets = obtain_images(filepath)
 
     print("Obtaining folders...")
     folders_to_process = helper.folders_to_process_list()
     # Process the specified folders
     print("Starting to process output PNGs...")
-    process_main_folders(cwd, folders_to_process, total_assets)
+    base_path = os.path.join(cwd, dir_name)
+    process_main_folders(base_path, folders_to_process, total_assets)
     print("Copying items...")
-    process_main_folders_copypasta(cwd, folders_to_process, total_assets)
+    process_main_folders_copypasta(base_path, folders_to_process, total_assets)
