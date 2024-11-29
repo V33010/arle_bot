@@ -15,8 +15,8 @@ def main():
         data = tomllib.load(f)
 
     arle_config: ConfigValidator = ConfigValidator.model_validate(data)
-    print(arle_config.model_dump_json(indent=4))
-    print("validated config file successfully")
+    # print(arle_config.model_dump_json(indent=4))
+    # print("validated config file successfully")
 
     clear_terminal()  # TODO : review use of clear terminal and it's usefulness after logs are added
 
@@ -36,7 +36,7 @@ def main():
         "cogs.discord-utils",
         "cogs.music",
         "cogs.moderation",
-        "cogs.smashorpass",
+        "cogs.smashorpass_api",
     ]
 
     for extension in extensions:
