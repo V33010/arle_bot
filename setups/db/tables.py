@@ -1,7 +1,7 @@
 from validators.config import ConfigValidator
 import tomllib
 from db.arle import Database
-from db.schema import (
+from setups.db.schema import (
     c_users_tbl,
     c_acc_tbl,
     c_skins_tbl,
@@ -11,7 +11,7 @@ from db.schema import (
 )
 
 
-def run_migrations():
+def setup_tables():
     with open("config.toml", "rb") as t:
         data = tomllib.load(t)
     config: ConfigValidator = ConfigValidator.model_validate(data)
@@ -26,4 +26,4 @@ def run_migrations():
 
 
 if __name__ == "__main__":
-    run_migrations()
+    setup_tables()
