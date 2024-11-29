@@ -25,4 +25,5 @@ def run_migrations():
     db.write(c_acc_crosshair_tbl)
 
 
-run_migrations()
+if __name__ == "__main__":
+    run_migrations()
