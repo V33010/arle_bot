@@ -25,3 +25,8 @@ class Database:
     def write(self, sql: str):
         self.conn.execute(sql)
         self.conn.commit()
+
+    def drop_table(self, table_name: str):
+        sql = f"drop table if exists {table_name};"
+        self.conn.execute(sql)
+        self.conn.commit()
