@@ -134,6 +134,7 @@ class SmashOrPass(commands.Cog):
             # Send the image and buttons to the thread
             embed = discord.Embed(title=display_name, color=discord.Color.blue())
             embed.set_image(url=image_url)
+            embed.set_footer(text=f"{user.name}'s session")
             await thread.send(embed=embed, view=view)
 
         except Exception as e:
