@@ -1,3 +1,4 @@
+import tomllib
 import discord
 from discord.ext import commands
 import os
@@ -7,7 +8,12 @@ import time
 import lyricsgenius
 from pydub import AudioSegment
 from mutagen.id3 import ID3
-from mutagen.mp3 import MP3
+from validators.config import ConfigValidator
+
+with open(os.path.join("config.toml"), "rb") as f:
+    data = tomllib.load(f)
+arle_config: ConfigValidator = ConfigValidator.model_validate(data)
+genius_token = arle_config.secrets.genius_token
 
 
 class MusicQueue:
@@ -466,7 +472,8 @@ class Music(commands.Cog):
     )
     async def lyrics_from_genius(self, ctx: discord.ApplicationContext, song: str):
         await ctx.defer()
-        api_key = os.getenv("genius_token")
+        api_key = genius_token
+        print(f"GENIUS API KEY: {api_key}")
         genius = lyricsgenius.Genius(api_key)
         song_name = song
         song = genius.search_song(song)
