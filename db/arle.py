@@ -22,8 +22,11 @@ class Database:
             )
 
     # write raw sql to db
-    def write(self, sql: str):
-        self.conn.execute(sql)
+    def write(self, sql: str, params: tuple = None):
+        if params:
+            self.conn.execute(sql, parameters=params)
+        else:
+            self.conn.execute(sql)
         self.conn.commit()
 
     def drop_table(self, table_name: str):
