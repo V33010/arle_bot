@@ -1,6 +1,8 @@
 from validators.config import ConfigValidator
+from utils.db import map_row_to_skin_chromas
 import libsql_experimental as libsql
 from validators.skin import SkinChromas
+import random
 
 
 class Database:
@@ -35,4 +37,8 @@ class Database:
         self.conn.execute(sql)
         self.conn.commit()
 
-    def fetch_random_image(self) -> SkinChromas: ...
+    def fetch_random_image(self) -> SkinChromas:
+        skin_id = random.randint(1, 2023)
+        result = self.conn.execute(f"select * from skins where id={skin_id}")
+        rows = result.fetchall()
+        return map_row_to_skin_chromas(rows)

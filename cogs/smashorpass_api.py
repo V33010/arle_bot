@@ -1,8 +1,6 @@
 import discord
-import requests
 from discord.ext import commands
 from discord.ui import Button, View
-import random
 
 import tomllib
 from validators.config import ConfigValidator
@@ -12,7 +10,6 @@ from validators.skin import SkinChromas
 
 class SmashOrPass(commands.Cog):
     def __init__(self, bot: commands.Bot):
-
         with open("config.toml", "rb") as t:
             data = tomllib.load(t)
         self.config: ConfigValidator = ConfigValidator.model_validate(data)
@@ -20,19 +17,6 @@ class SmashOrPass(commands.Cog):
         self.bot = bot
         self.session_threads = {}  # Maps user ID to thread ID
 
-    #
-    # async def fetch_image_from_api(self):
-    #     """Fetch a random image URL and metadata from the API."""
-    #     api_url = "https://valorant-api.com/v1/weapons/skinchromas"
-    #     response = requests.get(api_url)
-    #
-    #     if response.status_code == 200:
-    #         data = response.json().get("data", [])
-    #         if data:
-    #             choice = random.choice(data)
-    #             return choice.get("fullRender"), choice.get("displayName")
-    #     return None, None
-    #
     @commands.slash_command(
         name="smashorpass", description="Start a Smash or Pass session."
     )
