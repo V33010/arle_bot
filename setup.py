@@ -1,7 +1,7 @@
 import typer
 from setups.skins import skin_setup
 from setups.db.tables import setup_tables
-from setups.db.skins import populate_weapons_table
+from setups.db.skins import populate_skins_table
 from setups.db.reset import reset_database
 
 app = typer.Typer()
@@ -18,7 +18,7 @@ def db(schema: bool = False, skins: bool = False, reset: bool = False):
     if schema:
         setup_tables()
     if skins:
-        populate_weapons_table()
+        populate_skins_table()
     if reset:
         reset_database()
 
