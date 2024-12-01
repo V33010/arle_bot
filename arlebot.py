@@ -36,7 +36,7 @@ def main():
         "cogs.discord-utils",
         "cogs.music",
         "cogs.moderation",
-        "cogs.smashorpass_api",
+        "cogs.smashorpass",
     ]
 
     for extension in extensions:
