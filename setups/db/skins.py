@@ -27,5 +27,4 @@ def populate_skins_table():
                 str(valSkin.streamedVideo) if valSkin.streamedVideo else "NULL",
                 valSkin.assetPath,
             )
-            # print(sql)
             db.write(sql, params)
