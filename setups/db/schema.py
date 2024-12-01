@@ -19,11 +19,17 @@ create table if not exists accounts (
 """
 
 c_skins_tbl = """
-create table if not exists skins (
-  id integer primary key autoincrement,
-  name text not null unique,
-  pickrate real default 0.0,
-  total_occurrence_rate real default 0.0
+CREATE TABLE IF NOT EXISTS skins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  displayName TEXT NOT NULL UNIQUE,
+  pickrate REAL DEFAULT 0.0,
+  total_occurrence_rate REAL DEFAULT 0.0,
+  uuid TEXT NOT NULL UNIQUE,
+  displayIcon TEXT,
+  fullRender TEXT,
+  swatch TEXT,
+  streamedVideo TEXT,
+  assetPath TEXT
 );
 """
 
