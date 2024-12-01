@@ -1,6 +1,6 @@
 # contains sql to create the database schema
 c_users_tbl = """
-create table users (
+create table if not exists users (
   id integer primary key autoincrement,
   username text not null unique,
   created_at datetime default current_timestamp
@@ -8,7 +8,7 @@ create table users (
 """
 
 c_acc_tbl = """
-create table accounts (
+create table if not exists accounts (
   id integer primary key autoincrement,
   user_id integer not null,
   account_name text,
@@ -19,16 +19,22 @@ create table accounts (
 """
 
 c_skins_tbl = """
-create table skins (
-  id integer primary key autoincrement,
-  name text not null unique,
-  pickrate real default 0.0,
-  total_occurrence_rate real default 0.0
+CREATE TABLE IF NOT EXISTS skins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  displayName TEXT NOT NULL UNIQUE,
+  pickrate REAL DEFAULT 0.0,
+  total_occurrence_rate REAL DEFAULT 0.0,
+  uuid TEXT NOT NULL UNIQUE,
+  displayIcon TEXT,
+  fullRender TEXT,
+  swatch TEXT,
+  streamedVideo TEXT,
+  assetPath TEXT
 );
 """
 
 c_acc_skins_tbl = """
-create table account_skins (
+create table if not exists account_skins (
   account_id integer not null,
   skin_id integer not null,
   primary key (account_id, skin_id),
@@ -38,14 +44,14 @@ create table account_skins (
 """
 
 c_crosshairs_tbl = """
-create table crosshairs (
+create table if not exists crosshairs (
   id integer primary key autoincrement,
   crosshair_code text not null unique
 );
 """
 
 c_acc_crosshair_tbl = """
-create table account_crosshairs (
+create table if not exists account_crosshairs (
   account_id integer not null,
   crosshair_id integer not null,
   primary key (account_id, crosshair_id),
