@@ -18,6 +18,7 @@ def db(schema: bool = False, skins: bool = False, reset: bool = False):
     if schema:
         setup_tables()
     if skins:
+        setup_tables()
         populate_skins_table()
     if reset:
         reset_database()
