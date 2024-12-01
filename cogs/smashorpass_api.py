@@ -4,24 +4,35 @@ from discord.ext import commands
 from discord.ui import Button, View
 import random
 
+import tomllib
+from validators.config import ConfigValidator
+from db.arle import Database
+from validators.skin import SkinChromas
+
 
 class SmashOrPass(commands.Cog):
     def __init__(self, bot: commands.Bot):
+
+        with open("config.toml", "rb") as t:
+            data = tomllib.load(t)
+        self.config: ConfigValidator = ConfigValidator.model_validate(data)
+        self.db = Database(self.config)
         self.bot = bot
         self.session_threads = {}  # Maps user ID to thread ID
 
-    async def fetch_image_from_api(self):
-        """Fetch a random image URL and metadata from the API."""
-        api_url = "https://valorant-api.com/v1/weapons/skinchromas"
-        response = requests.get(api_url)
-
-        if response.status_code == 200:
-            data = response.json().get("data", [])
-            if data:
-                choice = random.choice(data)
-                return choice.get("fullRender"), choice.get("displayName")
-        return None, None
-
+    #
+    # async def fetch_image_from_api(self):
+    #     """Fetch a random image URL and metadata from the API."""
+    #     api_url = "https://valorant-api.com/v1/weapons/skinchromas"
+    #     response = requests.get(api_url)
+    #
+    #     if response.status_code == 200:
+    #         data = response.json().get("data", [])
+    #         if data:
+    #             choice = random.choice(data)
+    #             return choice.get("fullRender"), choice.get("displayName")
+    #     return None, None
+    #
     @commands.slash_command(
         name="smashorpass", description="Start a Smash or Pass session."
     )
@@ -70,8 +81,8 @@ class SmashOrPass(commands.Cog):
         """Send a new image with buttons to the thread."""
         try:
             # Fetch an image and display name from the API
-            image_url, display_name = await self.fetch_image_from_api()
-            if not image_url:
+            skin: SkinChromas = self.db.fetch_random_image()
+            if not skin.fullRender:
                 await thread.send("Could not fetch an image. Please try again later.")
                 return
 
@@ -132,8 +143,8 @@ class SmashOrPass(commands.Cog):
             exit_button.callback = button_callback
 
             # Send the image and buttons to the thread
-            embed = discord.Embed(title=display_name, color=discord.Color.blue())
-            embed.set_image(url=image_url)
+            embed = discord.Embed(title=skin.displayName, color=discord.Color.blue())
+            embed.set_image(url=skin.fullRender)
             embed.set_footer(text=f"{user.name}'s session")
             await thread.send(embed=embed, view=view)
 

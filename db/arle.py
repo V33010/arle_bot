@@ -1,5 +1,6 @@
 from validators.config import ConfigValidator
 import libsql_experimental as libsql
+from validators.skin import SkinChromas
 
 
 class Database:
@@ -33,3 +34,5 @@ class Database:
         sql = f"drop table if exists {table_name};"
         self.conn.execute(sql)
         self.conn.commit()
+
+    def fetch_random_image(self) -> SkinChromas: ...
