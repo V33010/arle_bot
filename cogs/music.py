@@ -598,41 +598,5 @@ class Music(commands.Cog):
         self.loop_type = None
         await ctx.respond("Disabled looping.")
 
-
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-print("Hello, ")
-
-
 def setup(bot):
     bot.add_cog(Music(bot))
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
