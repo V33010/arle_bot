@@ -1,24 +1,37 @@
 from timeit import default_timer as timer
 import discord
-import warnings
+from pydantic import ValidationError
+
+# import warnings
 import tomllib
 from validators.config import ConfigValidator
-from utils.reboot import clear_terminal
+from rich.traceback import install
+from utils.logger import log
+from loguru import logger
 
-start = timer()
+install()  # install rich colourful tracebacks
 
-warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
+
+# warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
 
 
 def main():
+    log.info("Starting up arlebot")
+    start = timer()
+    log.debug("Starting timer")
     with open("config.toml", "rb") as f:
         data = tomllib.load(f)
 
-    arle_config: ConfigValidator = ConfigValidator.model_validate(data)
-    # print(arle_config.model_dump_json(indent=4))
-    # print("validated config file successfully")
-
-    clear_terminal()  # TODO : review use of clear terminal and it's usefulness after logs are added
+    try:
+        arle_config: ConfigValidator = ConfigValidator.model_validate(data)
+        log.success("Validated config successfully")
+        log.debug(f"Config file \n{arle_config.model_dump_json()}")
+    except ValidationError as v:
+        log.error("invalid config file , cannot start up")
+        log.error(v)
+        log.warning("shutting down . . .")
+        log.debug("Goodbye :(")
+        exit(1)
 
     intents = discord.Intents().all()
     intents.message_content = True
@@ -29,8 +42,8 @@ def main():
     @bot.event
     async def on_ready():
         end = timer()
-        print(f"{bot.user} is ready and online in {end-start:.2f}s!")
-        print(f"{bot.user} is connected to {bot.guilds}")
+        log.info(f"{bot.user} is ready and online in {end-start:.2f}s!")
+        log.info(f"{bot.user} is connected to {bot.guilds}")
 
     extensions = [
         "cogs.discord-utils",
@@ -40,11 +53,14 @@ def main():
     ]
 
     for extension in extensions:
+        log.debug(f"loaded {extension} extension")
         bot.load_extension(extension)
 
     bot.run(arle_config.secrets.discord_token)
-    print("shutting down")
+    log.warning("shutting down arlebot")
+    log.debug("Goodbye :(")
 
 
 if __name__ == "__main__":
+    log.success("Hello :)")
     main()
