@@ -128,48 +128,6 @@ class SmashOrPass(commands.Cog):
                     # Send a new image
                     await self.send_new_image(user, thread)
 
-            # async def button_callback(interaction: discord.Interaction):
-            #     """Handle button interactions."""
-            #     if interaction.user.id != user.id:
-            #         await interaction.response.send_message(
-            #             "This is not your session!", ephemeral=True
-            #         )
-            #         return
-            #     # Disable buttons and archive the thread
-            #     for child in view.children:
-            #         child.disabled = True
-            #
-            #     # Fetch the current embed
-            #     current_embed = interaction.message.embeds[0]
-            #     new_title = current_embed.title
-            #
-            #     # Determine the user's choice
-            #     if interaction.data["custom_id"] == "exit":
-            #         # End the session
-            #         await interaction.response.send_message(
-            #             "Session ended. Goodbye!", ephemeral=True
-            #         )
-            #
-            #         await interaction.message.edit(view=view)
-            #         await thread.archive()
-            #         self.session_threads.pop(user.id, None)
-            #     else:
-            #         # Update embed title based on the user's choice
-            #         if interaction.data["custom_id"] == "smash":
-            #             new_title += " [Smashed]"
-            #             response = "You smashed it!"
-            #         else:
-            #             new_title += " [Passed]"
-            #             response = "You passed it!"
-            #
-            #         # Update the embed with the new title
-            #         current_embed.title = new_title
-            #         await interaction.message.edit(embed=current_embed, view=view)
-            #
-            #         # Send a new image
-            #         await interaction.response.send_message(response, ephemeral=True)
-            #         await self.send_new_image(user, thread)
-
             smash_button.callback = button_callback
             pass_button.callback = button_callback
             exit_button.callback = button_callback
