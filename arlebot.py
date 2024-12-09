@@ -1,21 +1,14 @@
 from timeit import default_timer as timer
 import discord
 from pydantic import ValidationError
-
-# import warnings
 import tomllib
 from validators.config import ConfigValidator
 from rich.traceback import install
 from utils.logger import log
-from loguru import logger
-
-install()  # install rich colourful tracebacks
-
-
-# warnings.filterwarnings("ignore", category=SyntaxWarning, module="pydub.utils")
 
 
 def main():
+    install()  # install rich colourful tracebacks
     log.info("Starting up arlebot")
     start = timer()
     log.debug("Starting timer")
