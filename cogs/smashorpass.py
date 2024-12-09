@@ -1,10 +1,11 @@
+import tomllib
+
 import discord
 from discord.ext import commands
 from discord.ui import Button, View
 
-import tomllib
-from validators.config import ConfigValidator
 from db.arle import Database
+from validators.config import ConfigValidator
 from validators.skin import SkinChromas
 
 
@@ -95,32 +96,37 @@ class SmashOrPass(commands.Cog):
                     )
                     return
 
-                # Disable buttons after interaction
+                # Disable buttons and archive the thread
                 for child in view.children:
                     child.disabled = True
 
+                # Fetch the current embed
+                current_embed = interaction.message.embeds[0]
+                new_title = current_embed.title
+
+                # Determine the user's choice
                 if interaction.data["custom_id"] == "exit":
                     # End the session
                     await interaction.response.send_message(
                         "Session ended. Goodbye!", ephemeral=True
                     )
-
                     await interaction.message.edit(view=view)
                     await thread.archive()
                     self.session_threads.pop(user.id, None)
-
                 else:
-                    # Respond to the interaction and send a new image
-                    response = (
-                        "You smashed it!"
-                        if interaction.data["custom_id"] == "smash"
-                        else "You passed it!"
-                    )
-                    await interaction.response.send_message(response, ephemeral=True)
-                    await self.send_new_image(user, thread)
+                    # Update embed title based on the user's choice
+                    if interaction.data["custom_id"] == "smash":
+                        new_title += " [Smashed]"
+                    else:
+                        new_title += " [Passed]"
 
-                    # Update the original message in the thread with the disabled buttons
-                    await interaction.message.edit(view=view)
+                    # Update the embed with the new title
+                    current_embed.title = new_title
+                    await interaction.response.defer()
+                    await interaction.message.edit(embed=current_embed, view=view)
+
+                    # Send a new image
+                    await self.send_new_image(user, thread)
 
             smash_button.callback = button_callback
             pass_button.callback = button_callback
