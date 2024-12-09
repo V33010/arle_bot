@@ -8,6 +8,7 @@ dependencies = [
     "beautifulsoup4>=4.12.3",
     "libsql-experimental>=0.0.41",
     "logfire[sqlalchemy]>=2.4.1",
+    "loguru>=0.7.2",
     "lyricsgenius>=3.0.1",
     "mutagen>=1.47.0",
     "pillow>=11.0.0",
@@ -16,6 +17,7 @@ dependencies = [
     "pydub>=0.25.1",
     "pynacl>=1.5.0",
     "requests>=2.32.3",
+    "rich>=13.9.4",
     "selenium>=4.26.1",
     "typer>=0.13.1",
 ]
