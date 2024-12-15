@@ -3,6 +3,7 @@ from utils.db import map_row_to_skin_chromas
 import libsql_experimental as libsql
 from validators.skin import SkinChromas
 import random
+from utils.logger import log
 
 
 class Database:
@@ -23,21 +24,25 @@ class Database:
                 auth_token=self.auth_token,
                 sync_interval=60,
             )
+        log.success("connected to db successfully")
 
     # write raw sql to db
     def write(self, sql: str, params: tuple = None):
         if params:
+            log.debug(f"writing {sql} to db with params = {params}")
             self.conn.execute(sql, parameters=params)
         else:
+            log.debug(f"writing {sql} to db")
             self.conn.execute(sql)
         self.conn.commit()
 
     def drop_table(self, table_name: str):
         sql = f"drop table if exists {table_name};"
+        log.debug(f"writing {sql} to db")
         self.conn.execute(sql)
         self.conn.commit()
 
-    def fetch_random_image(self) -> SkinChromas:
+    def fetch_random_skin(self) -> SkinChromas:
         skin_id = random.randint(1, 2023)
         result = self.conn.execute(f"select * from skins where id={skin_id}")
         rows = result.fetchall()
