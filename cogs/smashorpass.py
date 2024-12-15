@@ -1,3 +1,4 @@
+import random
 import tomllib
 
 import discord
@@ -63,10 +64,13 @@ class SmashOrPass(commands.Cog):
             )
 
     async def send_new_image(self, user: discord.User, thread: discord.Thread):
+
+        sus_link = "https://r.mtdv.me/videos/araxysvandal"
         """Send a new image with buttons to the thread."""
         try:
             # Fetch an image and display name from the API
             skin: SkinChromas = self.db.fetch_random_image()
+            video_url = skin.streamedVideo
             if not skin.fullRender:
                 await thread.send("Could not fetch an image. Please try again later.")
                 return
@@ -81,14 +85,19 @@ class SmashOrPass(commands.Cog):
             exit_button = Button(
                 label="Exit", style=discord.ButtonStyle.success, custom_id="exit"
             )
+            video_button = Button(
+                label="Video", style=discord.ButtonStyle.secondary, custom_id="video"
+            )
 
             # Define the View and add callbacks
             view = View(timeout=None)
             view.add_item(smash_button)
             view.add_item(pass_button)
+            if video_url:
+                view.add_item(video_button)
             view.add_item(exit_button)
 
-            async def button_callback(interaction: discord.Interaction):
+            async def button_callback(interaction):
                 """Handle button interactions."""
                 if interaction.user.id != user.id:
                     await interaction.response.send_message(
@@ -105,32 +114,47 @@ class SmashOrPass(commands.Cog):
                 new_title = current_embed.title
 
                 # Determine the user's choice
-                if interaction.data["custom_id"] == "exit":
-                    # End the session
-                    await interaction.response.send_message(
-                        "Session ended. Goodbye!", ephemeral=True
-                    )
-                    await interaction.message.edit(view=view)
-                    await thread.archive()
-                    self.session_threads.pop(user.id, None)
-                else:
-                    # Update embed title based on the user's choice
-                    if interaction.data["custom_id"] == "smash":
-                        new_title += " [Smashed]"
+                if interaction.data["custom_id"] == "video":
+                    if video_url:
+                        url_str = str(video_url)
+                        if random.random() < 0.0001:
+                            url_str = str(sus_link)
+                        await interaction.response.send_message(
+                            f"[link]({url_str})", ephemeral=True
+                        )
                     else:
-                        new_title += " [Passed]"
+                        await interaction.response.send_message(
+                            "No video available for this skin."
+                        )
 
-                    # Update the embed with the new title
-                    current_embed.title = new_title
-                    await interaction.response.defer()
-                    await interaction.message.edit(embed=current_embed, view=view)
+                else:
+                    if interaction.data["custom_id"] == "exit":
+                        # End the session
+                        await interaction.response.send_message(
+                            "Session ended. Goodbye!", ephemeral=True
+                        )
+                        await interaction.message.edit(view=view)
+                        await thread.archive()
+                        self.session_threads.pop(user.id, None)
+                    else:
+                        # Update embed title based on the user's choice
+                        if interaction.data["custom_id"] == "smash":
+                            new_title += " [Smashed]"
+                        else:
+                            new_title += " [Passed]"
 
-                    # Send a new image
-                    await self.send_new_image(user, thread)
+                        # Update the embed with the new title
+                        current_embed.title = new_title
+                        await interaction.response.defer()
+                        await interaction.message.edit(embed=current_embed, view=view)
+
+                        # Send a new image
+                        await self.send_new_image(user, thread)
 
             smash_button.callback = button_callback
             pass_button.callback = button_callback
             exit_button.callback = button_callback
+            video_button.callback = button_callback
 
             # Send the image and buttons to the thread
             embed = discord.Embed(title=skin.displayName, color=discord.Color.blue())
