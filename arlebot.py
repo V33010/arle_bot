@@ -44,11 +44,12 @@ def main():
 
     extensions = [
         "cogs.discord-utils",
-        "cogs.music",
         "cogs.moderation",
         "cogs.smashorpass",
     ]
 
+    if arle_config.arle.local_music:
+        extensions.append("cogs.music")
     for extension in extensions:
         log.debug(f"loaded {extension} extension")
         bot.load_extension(extension)
