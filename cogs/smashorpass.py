@@ -8,6 +8,7 @@ from discord.ui import Button, View
 from db.arle import Database
 from validators.config import ConfigValidator
 from validators.skin import SkinChromas
+from utils.logger import log
 
 
 class SmashOrPass(commands.Cog):
@@ -24,17 +25,25 @@ class SmashOrPass(commands.Cog):
     )
     async def smashorpass(self, ctx: discord.ApplicationContext):
         """Handles the Smash or Pass command."""
+        ctxlog = log.bind(
+            user=ctx.author.name,
+            channel=ctx.channel.name,
+            server=ctx.guild.name,
+            user_id=ctx.author.id,
+        )
+        ctxlog.info("got smash or pass request")
         try:
             # Acknowledge the interaction
             await ctx.defer(ephemeral=True)
 
             user_id = ctx.user.id
-
             # Check if the user already has a session
             if user_id in self.session_threads:
                 await ctx.respond(
-                    "You already have an active Smash or Pass session!", ephemeral=True
+                    "You already have an active Smash or Pass session!",
+                    ephemeral=True,
                 )
+                log.warning("user has an active session")
                 return
 
             # Create a thread for the session
@@ -42,6 +51,7 @@ class SmashOrPass(commands.Cog):
             thread = await ctx.channel.create_thread(
                 name=thread_name, type=discord.ChannelType.public_thread
             )
+            ctxlog.success(f"thread created succesfully {thread_name}")
 
             # Store the thread ID for the user
             self.session_threads[user_id] = thread.id
@@ -51,28 +61,37 @@ class SmashOrPass(commands.Cog):
                 f"Your session has started! Go to {thread.mention} to continue.",
                 ephemeral=True,
             )
-
+            ctxlog.success("session started in thread successfully")
             # Start the Smash or Pass session
-            await self.send_new_image(ctx.user, thread)
+
+            await self.send_new_image(ctx.user, thread, ctxlog)
 
         except Exception as e:
             # Log any errors and inform the user
-            print(f"Error in smashorpass command: {e}")
+            log.exception(f"Error in smashorpass command: {e}")
             await ctx.respond(
                 "An error occurred while starting your session. Please try again later.",
                 ephemeral=True,
             )
 
-    async def send_new_image(self, user: discord.User, thread: discord.Thread):
-
+    async def send_new_image(self, user: discord.User, thread: discord.Thread, log=log):
         sus_link = "https://r.mtdv.me/videos/araxysvandal"
         """Send a new image with buttons to the thread."""
+
+        log.info("Sending skin image")
         try:
             # Fetch an image and display name from the API
-            skin: SkinChromas = self.db.fetch_random_image()
+            skin: SkinChromas = self.db.fetch_random_skin()
+
+            log.debug(
+                f"fetched {skin.displayName.replace("\n", " ").replace("\r", " ")} | occurance_rate {skin.total_occurance_rate} | pick_rate {skin.pickrate}"
+            )
+
             video_url = skin.streamedVideo
+            log.debug(f"video_url is {video_url}")
             if not skin.fullRender:
                 await thread.send("Could not fetch an image. Please try again later.")
+                log.critical("could not fetch skin image")
                 return
 
             # Create buttons for Smash or Pass
@@ -103,6 +122,7 @@ class SmashOrPass(commands.Cog):
                     await interaction.response.send_message(
                         "This is not your session!", ephemeral=True
                     )
+                    log.info("invalid session access attempted")
                     return
 
                 # Disable buttons and archive the thread
@@ -116,16 +136,20 @@ class SmashOrPass(commands.Cog):
                 # Determine the user's choice
                 if interaction.data["custom_id"] == "video":
                     if video_url:
+                        log.info("video url exists for this skin")
+                        log.debug(video_url)
                         url_str = str(video_url)
                         if random.random() < 0.0001:
                             url_str = str(sus_link)
                         await interaction.response.send_message(
                             f"[link]({url_str})", ephemeral=True
                         )
+                        log.success("video url sent successfully")
                     else:
                         await interaction.response.send_message(
                             "No video available for this skin."
                         )
+                        log.info("no video url for this skin")
 
                 else:
                     if interaction.data["custom_id"] == "exit":
@@ -133,14 +157,17 @@ class SmashOrPass(commands.Cog):
                         await interaction.response.send_message(
                             "Session ended. Goodbye!", ephemeral=True
                         )
+                        log.info("ending session")
                         await interaction.message.edit(view=view)
                         await thread.archive()
                         self.session_threads.pop(user.id, None)
                     else:
                         # Update embed title based on the user's choice
                         if interaction.data["custom_id"] == "smash":
+                            log.info("skin was SMASHED")
                             new_title += " [Smashed]"
                         else:
+                            log.info("skin was PASSED")
                             new_title += " [Passed]"
 
                         # Update the embed with the new title
@@ -149,7 +176,7 @@ class SmashOrPass(commands.Cog):
                         await interaction.message.edit(embed=current_embed, view=view)
 
                         # Send a new image
-                        await self.send_new_image(user, thread)
+                        await self.send_new_image(user, thread, log)
 
             smash_button.callback = button_callback
             pass_button.callback = button_callback
@@ -163,7 +190,7 @@ class SmashOrPass(commands.Cog):
             await thread.send(embed=embed, view=view)
 
         except Exception as e:
-            print(f"Error in send_new_image: {e}")
+            log.critical(f"Error in send_new_image: {e}")
             await thread.send("An error occurred while fetching a new image.")
 
     def cog_unload(self):

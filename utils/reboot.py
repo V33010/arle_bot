@@ -1,6 +1,7 @@
 # TODO : return win/linux restart file according to os
 import platform
 import os
+from utils.logger import log
 
 
 def clear_terminal():
@@ -9,7 +10,7 @@ def clear_terminal():
 
 def get_restart_file(bot_dir, path) -> (str, str):
     os_name = platform.system()
-    print(os_name)
+    log.info(f"Running on platform {os_name}")
     if os_name == "Windows":
         return (
             f"""

@@ -9,6 +9,8 @@ import lyricsgenius
 from pydub import AudioSegment
 from mutagen.id3 import ID3
 from validators.config import ConfigValidator
+from utils.logger import log
+from mutagen.mp3 import MP3
 
 with open(os.path.join("config.toml"), "rb") as f:
     data = tomllib.load(f)
@@ -20,6 +22,7 @@ class MusicQueue:
     def __init__(self):
         self.queue = []
         self.current_index = -1
+        log.warning("NO LOGS FOR MUSIC COG")
 
     def add_song(self, song):
         self.queue.append(song)
@@ -599,40 +602,5 @@ class Music(commands.Cog):
         await ctx.respond("Disabled looping.")
 
 
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-print("Hello, ")
-
-
 def setup(bot):
     bot.add_cog(Music(bot))
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #
-    #

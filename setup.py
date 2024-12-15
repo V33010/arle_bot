@@ -3,6 +3,9 @@ from setups.skins import skin_setup
 from setups.db.tables import setup_tables
 from setups.db.skins import populate_skins_table
 from setups.db.reset import reset_database
+from rich.traceback import install
+
+install()
 
 app = typer.Typer()
 
