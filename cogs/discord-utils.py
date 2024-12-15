@@ -5,16 +5,20 @@ import os
 from discord.commands import slash_command
 from discord.ext import commands
 from utils import reboot
+from utils.logger import log
+from discord.bot import Bot
 
 
 class Ping(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self, bot: Bot):
+        self.bot: Bot = bot
         # Create the restart script when the cog is loaded
         self.create_restart_script()
+        self.log = log
 
     def create_restart_script(self):
         """Creates the permanent restart script"""
+
         cogs_dir = os.path.dirname(os.path.abspath(__file__))
         bot_dir = os.path.dirname(cogs_dir)
         bot_path = os.path.join(bot_dir, "arlebot.py")
@@ -31,14 +35,27 @@ class Ping(commands.Cog):
             # Only create if it doesn't exist
         with open(restart_path, "w") as exe_file:
             exe_file.write(restart_file)
+        log.debug(f"created restart script for {platform}")
 
     @slash_command(name="ping", description="Return bot latency")
     async def ping(self, ctx: discord.ApplicationContext):
+        with log.contextualize(
+            user=ctx.author.name,
+            channel=ctx.channel.name,
+            server=ctx.guild.name,
+        ):
+            log.info("got ping command!")
         await ctx.respond(f"pong! ({self.bot.latency * 1000:.2f} ms)")
 
     @slash_command(name="reboot", description="Reboots the bot (Owner only)")
     @commands.is_owner()
     async def reboot(self, ctx: discord.ApplicationContext):
+        with log.contextualize(
+            user=ctx.author.name,
+            channel=ctx.channel.name,
+            server=ctx.guild.name,
+        ):
+            log.info("got reboot command!")
         """Reboots the bot"""
         try:
             await ctx.respond("Rebooting...", ephemeral=True)
@@ -62,6 +79,7 @@ class Ping(commands.Cog):
             os._exit(0)
 
         except Exception as e:
+            self.log.exception(e)
             await ctx.respond(f"Error during reboot: {str(e)}", ephemeral=True)
 
 
