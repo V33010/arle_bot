@@ -1,6 +1,4 @@
 from validators.skin import SkinChromas
-from utils.logger import log
-
 
 def map_row_to_skin_chromas(row):
     inner = row[0]
@@ -17,8 +15,4 @@ def map_row_to_skin_chromas(row):
         pickrate=inner[3],  # 4th column is pickrate
         total_occurance_rate=inner[2],  # 3rd column is total occurrence rate
     )
-    log.debug(
-        f"showing {s.displayName} | occurance_rate {s.total_occurance_rate} | pick_rate {s.pickrate}"
-    )
-
     return s
