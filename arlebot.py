@@ -17,6 +17,7 @@ def main():
 
     try:
         arle_config: ConfigValidator = ConfigValidator.model_validate(data)
+        print("got here")
         log.success("Validated config successfully")
         log.debug(f"Config file \n{arle_config.model_dump_json()}")
     except ValidationError as v:
@@ -36,7 +37,9 @@ def main():
     async def on_ready():
         end = timer()
         log.info(f"{bot.user} is ready and online in {end-start:.2f}s!")
-        log.info(f"{bot.user} is connected to {bot.guilds}")
+        server_names = [server.name for server in bot.guilds]
+        for s in server_names:
+            log.success(f"connected to {s}!")
 
     extensions = [
         "cogs.discord-utils",
