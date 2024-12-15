@@ -7,6 +7,7 @@ from rich.traceback import install
 from utils.logger import log
 
 
+@log.catch()
 def main():
     install()  # install rich colourful tracebacks
     log.info("Starting up arlebot")
