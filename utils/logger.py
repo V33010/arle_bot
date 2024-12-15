@@ -21,13 +21,14 @@ def setup_logging():
         format=globalFormat,
         level="TRACE",  # Capture all log levels from DEBUG upwards
     )
-
     logger.add(
         "app.log",
         rotation="100 MB",
         format=globalFormat,
         level="TRACE",
     )
+
+    logger.level("INFO", color="<light-white>")
     return logger
 
 
