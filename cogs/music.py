@@ -10,6 +10,7 @@ from pydub import AudioSegment
 from mutagen.id3 import ID3
 from validators.config import ConfigValidator
 from utils.logger import log
+from mutagen.mp3 import MP3
 
 with open(os.path.join("config.toml"), "rb") as f:
     data = tomllib.load(f)
