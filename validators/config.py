@@ -11,7 +11,7 @@ class arleConfig(CustomBaseModel):
     version: str
     log_level: Literal["info", "debug", "error", "warn", "fatal"]
     log_file: str
-    local_first: bool
+    local_music: bool
     dev_mode: bool
 
 

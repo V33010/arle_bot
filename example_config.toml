@@ -7,7 +7,7 @@ title = "Arle bot"
 version = "0.0.0" 
 log_level = "debug"
 log_file = "arle.log"
-local_first = true # when this is false handle music playing and lyrics differently
+local_music = false # when this is true , bot expects music present on local device and enables music features
 dev_mode = true
 
 [secrets]
