@@ -84,7 +84,7 @@ class SmashOrPass(commands.Cog):
             skin: SkinChromas = self.db.fetch_random_skin()
 
             log.debug(
-                f"fetched {skin.displayName.replace("\n", " ").replace("\r", " ")} | occurance_rate {skin.total_occurance_rate} | pick_rate {skin.pickrate}"
+                f'fetched {skin.displayName.replace("\n", " ").replace("\r", " ")} | occurance_rate {skin.total_occurance_rate} | pick_rate {skin.pickrate}'
             )
 
             video_url = skin.streamedVideo

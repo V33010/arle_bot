@@ -1,5 +1,6 @@
 from validators.skin import SkinChromas
 
+
 def map_row_to_skin_chromas(row):
     inner = row[0]
     s = SkinChromas(
