@@ -7,6 +7,8 @@ from rich.traceback import install
 
 from utils.logger import log
 from validators.config import ConfigValidator
+import logfire
+from logging import basicConfig
 
 
 @log.catch()
@@ -31,6 +33,14 @@ def main():
         log.warning("shutting down . . .")
         log.debug("Goodbye :(")
         exit(1)
+
+    # configure logfire
+    logfire.configure(token=arle_config.secrets.logfire_token, service_name="arle-bot")
+    logfire.instrument_system_metrics()
+    # configure loguru to send logs to logfire
+    log.configure(handlers=[logfire.loguru_handler()])
+    # configure stdlib logger to send logs to logfire
+    basicConfig(handlers=[logfire.LogfireLoggingHandler(level=0)], level=0, force=True)
 
     intents = discord.Intents().all()
     intents.message_content = True
