@@ -1,12 +1,14 @@
-import platform
-import discord
-import subprocess
 import os
+import platform
+import subprocess
+
+import discord
+from discord.bot import Bot
 from discord.commands import slash_command
 from discord.ext import commands
+
 from utils import reboot
 from utils.logger import log
-from discord.bot import Bot
 
 
 class Ping(commands.Cog):
