@@ -45,5 +45,20 @@ class Database:
     def fetch_random_skin(self) -> SkinChromas:
         skin_id = random.randint(1, 2023)
         result = self.conn.execute(f"select * from skins where id={skin_id}")
-        rows = result.fetchall()
-        return map_row_to_skin_chromas(rows)
+        row = result.fetchall()
+        skin = map_row_to_skin_chromas(row)
+        self.update_occurance(skin.uuid)
+        skin.total_occurance_rate += 1
+        return skin
+
+    # increases the total_occurance_rate counter in the db , this is called automatically when a skin is fetched
+    def update_occurance(self, uuid: str):
+        sql = f"update skins set total_occurrence_rate = total_occurrence_rate + 1 where uuid = '{uuid}'"
+        self.conn.execute(sql)
+        self.conn.commit()
+
+    # increments the pickrate counter for a skin , should be called when a skin is smashed
+    def increment_pickrate(self, uuid: str):
+        sql = f"update skins set pickrate = pickrate + 1 where uuid = '{uuid}'"
+        self.conn.execute(sql)
+        self.conn.commit()

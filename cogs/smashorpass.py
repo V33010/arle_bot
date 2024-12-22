@@ -6,9 +6,9 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from db.arle import Database
+from utils.logger import log
 from validators.config import ConfigValidator
 from validators.skin import SkinChromas
-from utils.logger import log
 
 
 class SmashOrPass(commands.Cog):
@@ -164,14 +164,26 @@ class SmashOrPass(commands.Cog):
                     else:
                         # Update embed title based on the user's choice
                         if interaction.data["custom_id"] == "smash":
-                            log.info("skin was SMASHED")
-                            new_title += " [Smashed]"
+                            pick_rate = round(
+                                (skin.pickrate + 1 / skin.total_occurance_rate) * 100, 2
+                            )
+                            new_title += f" [Smashed]"
+                            new_field  =f"Pickrate: {pick_rate}%"
+                            log.debug(new_title)
+                            self.db.increment_pickrate(
+                                skin.uuid
+                            )  # updates pickrate for the skin
                         else:
-                            log.info("skin was PASSED")
-                            new_title += " [Passed]"
+                            pick_rate = round(  # don't have to increase total_occurance_rate here since it's automatically taken care of while fetching the skin
+                                (skin.pickrate / skin.total_occurance_rate) * 100, 2
+                            )
+                            new_title += f" [Passed]"
+                            new_field  =f"Pickrate: {pick_rate}%"
+                            log.debug(new_title)
 
                         # Update the embed with the new title
                         current_embed.title = new_title
+                        current_embed.add_field(name=new_field, value="", inline = False)
                         await interaction.response.defer()
                         await interaction.message.edit(embed=current_embed, view=view)
 
