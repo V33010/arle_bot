@@ -1,21 +1,21 @@
-import tomllib
-import discord
-from discord.ext import commands
-import os
 import asyncio
+import os
 import random
 import time
-import lyricsgenius
-from pydub import AudioSegment
+import tomllib
+
+import discord
+from discord.ext import commands
 from mutagen.id3 import ID3
-from validators.config import ConfigValidator
-from utils.logger import log
 from mutagen.mp3 import MP3
+from pydub import AudioSegment
+
+from utils.logger import log
+from validators.config import ConfigValidator
 
 with open(os.path.join("config.toml"), "rb") as f:
     data = tomllib.load(f)
 arle_config: ConfigValidator = ConfigValidator.model_validate(data)
-genius_token = arle_config.secrets.genius_token
 
 
 class MusicQueue:
@@ -469,29 +469,6 @@ class Music(commands.Cog):
         await ctx.respond(
             "Stopped the music, cleared the queue, and disconnected from the voice channel."
         )
-
-    @commands.slash_command(
-        name="lyrics_from_genius", description="Fetch lyrics from genius.com"
-    )
-    async def lyrics_from_genius(self, ctx: discord.ApplicationContext, song: str):
-        await ctx.defer()
-        api_key = genius_token
-        print(f"GENIUS API KEY: {api_key}")
-        genius = lyricsgenius.Genius(api_key)
-        song_name = song
-        song = genius.search_song(song)
-        if song:
-            await ctx.respond(f"Lyrics for **{song.title}** by **{song.artist}**")
-            if len(song.lyrics) > 2000:
-                chunks = [
-                    song.lyrics[i : i + 2000] for i in range(0, len(song.lyrics), 2000)
-                ]
-                for chunk in chunks:
-                    await ctx.send(chunk)
-            else:
-                await ctx.send(song.lyrics)
-        else:
-            await ctx.respond(f"No lyrics found for {song_name}")
 
     @commands.slash_command(
         name="play_playlist",
