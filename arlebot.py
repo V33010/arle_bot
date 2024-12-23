@@ -1,10 +1,12 @@
+import tomllib
 from timeit import default_timer as timer
+
 import discord
 from pydantic import ValidationError
-import tomllib
-from validators.config import ConfigValidator
 from rich.traceback import install
+
 from utils.logger import log
+from validators.config import ConfigValidator
 
 
 @log.catch()
