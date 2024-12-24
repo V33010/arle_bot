@@ -83,6 +83,8 @@ class LyricsCog(commands.Cog):
     @commands.slash_command(name="lyrics_from_genius")
     async def lyrics_from_genius(self, ctx, song_name: str):
         """Fetches lyrics from Genius and sends them to the Discord channel."""
+        await ctx.defer()
+
         song_url = search_song_on_genius(song_name)
         if song_url != "Song not found":
             lyrics = get_lyrics_from_url(song_url)
@@ -94,11 +96,11 @@ class LyricsCog(commands.Cog):
                     for i in range(0, len(lyrics), max_length)
                 ]
                 for chunk in chunks:
-                    await ctx.respond(chunk)
+                    await ctx.followup.send(chunk)
             else:
-                await ctx.respond("Could not fetch lyrics.")
+                await ctx.followup.send("Could not fetch lyrics.")
         else:
-            await ctx.respond("Song not found.")
+            await ctx.followup.send("Song not found.")
 
 
 def setup(bot):
