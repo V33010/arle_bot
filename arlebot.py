@@ -24,7 +24,7 @@ def main():
         log.success("Validated config successfully")
         log.debug(f"Config file \n{arle_config.model_dump_json()}")
     except ValidationError as v:
-        log.error("invalid config file , cannot start up")
+        log.error("invalid config file, cannot start up")
         log.error(v)
         log.warning("shutting down . . .")
         log.debug("Goodbye :(")
@@ -65,6 +65,7 @@ def main():
         "cogs.discord-utils",
         "cogs.moderation",
         "cogs.smashorpass",
+        "cogs.lyrics",
     ]
 
     if arle_config.arle.local_music:

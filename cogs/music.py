@@ -16,7 +16,6 @@ from validators.config import ConfigValidator
 with open(os.path.join("config.toml"), "rb") as f:
     data = tomllib.load(f)
 arle_config: ConfigValidator = ConfigValidator.model_validate(data)
-genius_token = arle_config.secrets.genius_token
 
 
 class MusicQueue:
