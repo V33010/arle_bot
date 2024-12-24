@@ -1,10 +1,12 @@
+import tomllib
 from timeit import default_timer as timer
+
 import discord
 from pydantic import ValidationError
-import tomllib
-from validators.config import ConfigValidator
 from rich.traceback import install
+
 from utils.logger import log
+from validators.config import ConfigValidator
 
 
 @log.catch()
@@ -41,6 +43,23 @@ def main():
         server_names = [server.name for server in bot.guilds]
         for s in server_names:
             log.success(f"connected to {s}!")
+
+    @bot.event
+    async def on_application_command_error(
+        ctx: discord.ApplicationContext, error: Exception
+    ):
+        # Catch CheckFailure specifically
+        if isinstance(error, discord.errors.CheckFailure):
+            with log.contextualize(
+                user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
+            ):
+                log.warning(
+                    f"Check failed for {ctx.command.name} command: {str(error)}"
+                )
+
+        else:
+            log.error(f"Unexpected error in {ctx.command.name}: {error}")
+            raise error
 
     extensions = [
         "cogs.discord-utils",
