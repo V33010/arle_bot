@@ -1,16 +1,17 @@
-import tomllib
-import discord
-from discord.ext import commands
-import os
 import asyncio
+import os
 import random
 import time
-import lyricsgenius
-from pydub import AudioSegment
+import tomllib
+
+import discord
+from discord.ext import commands
 from mutagen.id3 import ID3
-from validators.config import ConfigValidator
-from utils.logger import log
 from mutagen.mp3 import MP3
+from pydub import AudioSegment
+
+from utils.logger import log
+from validators.config import ConfigValidator
 
 with open(os.path.join("config.toml"), "rb") as f:
     data = tomllib.load(f)
@@ -64,6 +65,9 @@ class Music(commands.Cog):
         self.song_start_time = None
         self.song_duration = None
         self.message_channel = None
+        self.FFMPEG_OPTIONS = {
+            "options": '-vn -af "atempo=0.97,aresample=44100:filter_size=64:phase_shift=8"',
+        }
 
     def get_current_song(self):
         return self.queue.current_song()
@@ -103,7 +107,7 @@ class Music(commands.Cog):
         self.song_start_time = time.time()
         self.song_duration = self.get_song_duration(filename)
         vc.play(
-            discord.FFmpegPCMAudio(filename),
+            discord.FFmpegPCMAudio(filename, **self.FFMPEG_OPTIONS),
             after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
         )
         await self.create_now_playing_message(ctx)
@@ -112,6 +116,8 @@ class Music(commands.Cog):
         if self.now_playing_message:
             try:
                 await self.now_playing_message.delete()
+            except discord.errors.NotFound:
+                print("Now playing message was not found, skipping deletion.")
             except discord.errors.HTTPException as e:
                 if e.code == 50027:
                     pass
@@ -149,7 +155,7 @@ class Music(commands.Cog):
                 if vc.is_playing():
                     vc.stop()
                 vc.play(
-                    discord.FFmpegPCMAudio(current_song),
+                    discord.FFmpegPCMAudio(current_song, **self.FFMPEG_OPTIONS),
                     after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                 )
                 await self.create_now_playing_message(ctx)
@@ -164,9 +170,10 @@ class Music(commands.Cog):
                     print("The bot is not connected to a voice channel.")
         except Exception as e:
             print(f"Error in play_next_song: {e}")
-            if current_song and ctx.voice_client:
+            if ctx.voice_client:
+                current_song = self.get_current_song()
                 ctx.voice_client.play(
-                    discord.FFmpegPCMAudio(current_song),
+                    discord.FFmpegPCMAudio(current_song, **self.FFMPEG_OPTIONS),
                     after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                 )
 
@@ -374,37 +381,12 @@ class Music(commands.Cog):
             await ctx.respond("No previously played songs.")
             return
 
-        # Stop current playback and destroy message
+        else:
+            self.queue.current_index -= 2
+        if self.queue.current_index == -1:
+            self.queue.current_index = 0  # TODO fix the need to use this approach. The current method does not allow the first song from the queue to be played.
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
-        await self.destroy_now_playing_message()
-
-        # Update current index and get previous song
-        self.queue.current_index -= 1  # Directly decrement the index
-        current_song = self.queue.current_song()  # Get the song at new index
-
-        if not current_song:
-            await ctx.respond("Error accessing previous song.")
-            return
-
-        # Update timing information for the correct song
-        self.song_start_time = time.time()
-        self.song_duration = self.get_song_duration(current_song)
-
-        # Connect to voice if needed
-        if ctx.voice_client is None:
-            voice_channel = ctx.author.voice.channel
-            vc = await voice_channel.connect()
-        else:
-            vc = ctx.voice_client
-
-        # Play the previous song
-        vc.play(
-            discord.FFmpegPCMAudio(current_song),
-            after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
-        )
-
-        await self.create_now_playing_message(ctx)
 
     @commands.slash_command(name="skip", description="Skip the current song.")
     async def skip(self, ctx: discord.ApplicationContext):
@@ -412,17 +394,10 @@ class Music(commands.Cog):
             await ctx.respond("No music playing to be skipped.")
             return
 
-        if self.queue.current_index < len(self.queue.queue) - 1:
-            ctx.voice_client.stop()
-        else:
-            ctx.voice_client.stop()
-            await ctx.voice_client.disconnect()
-
         current_song_title = ID3(self.get_current_song()).get("TIT2", "Unknown Title")
+        ctx.voice_client.stop()
 
         await ctx.respond(f"Skipped {current_song_title}")
-        if self.queue.current_index < len(self.queue.queue) - 1:
-            await self.play_next_song(ctx)
 
     @commands.slash_command(name="pause", description="Pause the current song.")
     async def pause(self, ctx: discord.ApplicationContext):
@@ -471,29 +446,6 @@ class Music(commands.Cog):
         )
 
     @commands.slash_command(
-        name="lyrics_from_genius", description="Fetch lyrics from genius.com"
-    )
-    async def lyrics_from_genius(self, ctx: discord.ApplicationContext, song: str):
-        await ctx.defer()
-        api_key = genius_token
-        print(f"GENIUS API KEY: {api_key}")
-        genius = lyricsgenius.Genius(api_key)
-        song_name = song
-        song = genius.search_song(song)
-        if song:
-            await ctx.respond(f"Lyrics for **{song.title}** by **{song.artist}**")
-            if len(song.lyrics) > 2000:
-                chunks = [
-                    song.lyrics[i : i + 2000] for i in range(0, len(song.lyrics), 2000)
-                ]
-                for chunk in chunks:
-                    await ctx.send(chunk)
-            else:
-                await ctx.send(song.lyrics)
-        else:
-            await ctx.respond(f"No lyrics found for {song_name}")
-
-    @commands.slash_command(
         name="play_playlist",
         description="Play all audio files in the specified folder.",
     )
@@ -528,7 +480,7 @@ class Music(commands.Cog):
             self.song_start_time = time.time()
             self.song_duration = self.get_song_duration(self.get_current_song())
             vc.play(
-                discord.FFmpegPCMAudio(self.get_current_song()),
+                discord.FFmpegPCMAudio(self.get_current_song(), **self.FFMPEG_OPTIONS),
                 after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
             )
             await self.create_now_playing_message(ctx)
