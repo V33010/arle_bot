@@ -16,7 +16,7 @@ vct/
 allsongs/
 # testing/
 *.png
-*.PNG 
+*.PNG
 *.json
 *.JSON
 # Created by https://www.toptal.com/developers/gitignore/api/python

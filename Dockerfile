@@ -21,4 +21,3 @@ ENV TOKEN=""
 
 # Command to run the bot
 CMD ["python", "arlebot.py"]
-
