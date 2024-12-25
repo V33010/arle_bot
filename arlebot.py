@@ -62,6 +62,7 @@ def main():
         'cogs.moderation',
         'cogs.smashorpass',
         'cogs.lyrics',
+        'cogs.music_yt',
     ]
 
     if arle_config.arle.local_music:
