@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from db.arle import Database
-from utils.logger import log
+from utils.logger import log, get_context_logger
 from validators.config import ConfigValidator
 from validators.skin import SkinChromas
 
@@ -25,12 +25,7 @@ class SmashOrPass(commands.Cog):
     )
     async def smashorpass(self, ctx: discord.ApplicationContext):
         """Handles the Smash or Pass command."""
-        ctxlog = log.bind(
-            user=ctx.author.name,
-            channel=ctx.channel.name,
-            server=ctx.guild.name,
-            user_id=ctx.author.id,
-        )
+        ctxlog = get_context_logger(ctx)
         ctxlog.info("got smash or pass request")
         try:
             # Acknowledge the interaction
@@ -168,7 +163,7 @@ class SmashOrPass(commands.Cog):
                                 (skin.pickrate + 1 / skin.total_occurance_rate) * 100, 2
                             )
                             new_title += f" [Smashed]"
-                            new_field  =f"Pickrate: {pick_rate}%"
+                            new_field = f"Pickrate: {pick_rate}%"
                             log.debug(new_title)
                             self.db.increment_pickrate(
                                 skin.uuid
@@ -178,12 +173,12 @@ class SmashOrPass(commands.Cog):
                                 (skin.pickrate / skin.total_occurance_rate) * 100, 2
                             )
                             new_title += f" [Passed]"
-                            new_field  =f"Pickrate: {pick_rate}%"
+                            new_field = f"Pickrate: {pick_rate}%"
                             log.debug(new_title)
 
                         # Update the embed with the new title
                         current_embed.title = new_title
-                        current_embed.add_field(name=new_field, value="", inline = False)
+                        current_embed.add_field(name=new_field, value="", inline=False)
                         await interaction.response.defer()
                         await interaction.message.edit(embed=current_embed, view=view)
 

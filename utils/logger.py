@@ -1,5 +1,6 @@
 from loguru import logger
 import sys
+import discord
 
 globalFormat = (
     "<green>{time:YYYY-MM-DD HH:mm:ss}</green>| "
@@ -34,3 +35,12 @@ def setup_logging():
 
 # Create a global logger instance that can be imported everywhere
 log = setup_logging()
+
+
+def get_context_logger(ctx: discord.ApplicationContext):
+    return log.bind(
+        user=ctx.author.name,
+        channel=ctx.channel.name,
+        server=ctx.guild.name,
+        user_id=ctx.author.id,
+    )
