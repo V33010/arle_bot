@@ -1,14 +1,13 @@
-import discord
 import json
 import os
 import random
-from discord.ui import Button, View
+
+import discord
 from discord.ext import commands
+from discord.ui import Button, View
 from PIL import Image
 
-images_folder_path = os.path.join(
-    os.path.dirname(__file__), "..", "skin_assets", "allskins_full"
-)
+images_folder_path = os.path.join(os.path.dirname(__file__), '..', 'skin_assets', 'allskins_full')
 
 images_folder_path = os.path.abspath(images_folder_path)
 
@@ -21,14 +20,12 @@ class SmashOrPass(commands.Cog):
 
     def get_random_image(self):
         """Fetch a random image from the folder."""
-        images = [f for f in os.listdir(self.image_folder) if f.endswith(".png")]
+        images = [f for f in os.listdir(self.image_folder) if f.endswith('.png')]
         if not images:
             return None
         return os.path.join(self.image_folder, random.choice(images))
 
-    @commands.slash_command(
-        name="smashorpass", description="Send one random image with buttons"
-    )
+    @commands.slash_command(name='smashorpass', description='Send one random image with buttons')
     async def smashorpass(self, ctx: discord.ApplicationContext):
         """Start the Smash or Pass session."""
         # Initialize session key for the user
@@ -37,39 +34,35 @@ class SmashOrPass(commands.Cog):
         previous_message = None  # Track the previous message
 
         # Send an initial acknowledgment response
-        await ctx.respond("Starting Smash or Pass...", ephemeral=True)
+        await ctx.respond('Starting Smash or Pass...', ephemeral=True)
 
         async def send_new_image():
             """Send a new image with buttons and attach callbacks."""
             image_path = self.get_random_image()
 
             if image_path is None:
-                await ctx.send("No images available in the folder.")
+                await ctx.send('No images available in the folder.')
                 return None
 
             with Image.open(image_path) as img:
-                metadata = img.info.get("JSON_Metadata", None)
+                metadata = img.info.get('JSON_Metadata', None)
             if metadata:
-                print("JSON metadata:")
+                print('JSON metadata:')
                 print(metadata)
 
             metadata = json.loads(metadata)
             print(type(metadata))
-            display_name = metadata["displayName"]
+            display_name = metadata['displayName']
 
             # Prepare the image file to send
             image = discord.File(image_path)
 
             # Create buttons
             smash_button = Button(
-                style=discord.ButtonStyle.danger, label="Smash", custom_id="smash"
+                style=discord.ButtonStyle.danger, label='Smash', custom_id='smash'
             )
-            pass_button = Button(
-                style=discord.ButtonStyle.primary, label="Pass", custom_id="pass"
-            )
-            exit_button = Button(
-                style=discord.ButtonStyle.success, label="Exit", custom_id="exit"
-            )
+            pass_button = Button(style=discord.ButtonStyle.primary, label='Pass', custom_id='pass')
+            exit_button = Button(style=discord.ButtonStyle.success, label='Exit', custom_id='exit')
 
             # Define the view
             view = View(timeout=None)
@@ -83,18 +76,18 @@ class SmashOrPass(commands.Cog):
                 nonlocal previous_message, view  # Track and update the previous message
                 if interaction.user.id != user_id:
                     await interaction.response.send_message(
-                        "This is not your session!", ephemeral=True
+                        'This is not your session!', ephemeral=True
                     )
                     return
 
-                response_text = ""
+                response_text = ''
 
-                if interaction.custom_id == "smash":
-                    response_text = "You smashed it!"
-                elif interaction.custom_id == "pass":
-                    response_text = "You passed it!"
-                elif interaction.custom_id == "exit":
-                    response_text = "You exited it!"
+                if interaction.custom_id == 'smash':
+                    response_text = 'You smashed it!'
+                elif interaction.custom_id == 'pass':
+                    response_text = 'You passed it!'
+                elif interaction.custom_id == 'exit':
+                    response_text = 'You exited it!'
                     self.session_keys[user_id] = 0  # End session
                     await interaction.response.send_message(response_text)
                     # Disable all buttons

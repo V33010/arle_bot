@@ -1,12 +1,13 @@
+import os
+
 import requests
+from dotenv import load_dotenv
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 # from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -16,7 +17,7 @@ def get_title(file_path):
     from mutagen.id3 import ID3
 
     audio = ID3(file_path)
-    title_tag = audio.get("TIT2")
+    title_tag = audio.get('TIT2')
     if title_tag:
         return title_tag.text[0]
     return None
@@ -24,17 +25,17 @@ def get_title(file_path):
 
 def get_lyrics_page_url(title, genius_access_token):
     """Fetches the lyrics page URL from Genius based on the song title."""
-    headers = {"Authorization": f"Bearer {genius_access_token}"}
-    search_url = "https://api.genius.com/search"
-    params = {"q": title}
+    headers = {'Authorization': f'Bearer {genius_access_token}'}
+    search_url = 'https://api.genius.com/search'
+    params = {'q': title}
     response = requests.get(search_url, headers=headers, params=params)
     search_results = response.json()
 
-    hits = search_results["response"]["hits"]
+    hits = search_results['response']['hits']
     if hits:
-        song_info = hits[0]["result"]
-        lyrics_path = song_info["path"]
-        return f"https://genius.com{lyrics_path}"
+        song_info = hits[0]['result']
+        lyrics_path = song_info['path']
+        return f'https://genius.com{lyrics_path}'
     return None
 
 
@@ -42,9 +43,7 @@ def fetch_lyrics_page(url):
     """Fetches the HTML content of the lyrics page using Selenium."""
     options = Options()
     options.headless = True
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
     try:
         driver.get(url)
@@ -53,13 +52,13 @@ def fetch_lyrics_page(url):
         driver.implicitly_wait(10)
 
         # Save the HTML content of the page
-        with open("page.txt", "w", encoding="utf-8") as file:
+        with open('page.txt', 'w', encoding='utf-8') as file:
             file.write(driver.page_source)
 
-        print("HTML content of the lyrics page has been saved to page.txt.")
+        print('HTML content of the lyrics page has been saved to page.txt.')
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f'An error occurred: {e}')
 
     finally:
         driver.quit()
@@ -132,6 +131,6 @@ def fetch_lyrics_page(url):
 
 
 # Example usage
-genius_access_token = os.getenv("genius_token")
-title = "2nd life ashes"
+genius_access_token = os.getenv('genius_token')
+title = '2nd life ashes'
 fetch_lyrics_page(title, genius_access_token)

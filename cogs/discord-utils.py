@@ -23,33 +23,33 @@ class Ping(commands.Cog):
 
         cogs_dir = os.path.dirname(os.path.abspath(__file__))
         bot_dir = os.path.dirname(cogs_dir)
-        bot_path = os.path.join(bot_dir, "arlebot.py")
+        bot_path = os.path.join(bot_dir, 'arlebot.py')
 
-        restart_path_win = os.path.join(bot_dir, "reboot_bot.bat")
-        restart_path_linux = os.path.join(bot_dir, "reboot_bot.sh")
+        restart_path_win = os.path.join(bot_dir, 'reboot_bot.bat')
+        restart_path_linux = os.path.join(bot_dir, 'reboot_bot.sh')
         restart_path = restart_path_linux
 
         restart_file, platform = reboot.get_restart_file(bot_dir, bot_path)
 
-        if platform == "Windows":
+        if platform == 'Windows':
             restart_path = restart_path_win
 
             # Only create if it doesn't exist
-        with open(restart_path, "w") as exe_file:
+        with open(restart_path, 'w') as exe_file:
             exe_file.write(restart_file)
-        log.debug(f"created restart script for {platform}")
+        log.debug(f'created restart script for {platform}')
 
-    @slash_command(name="ping", description="Return bot latency")
+    @slash_command(name='ping', description='Return bot latency')
     async def ping(self, ctx: discord.ApplicationContext):
         with log.contextualize(
             user=ctx.author.name,
             channel=ctx.channel.name,
             server=ctx.guild.name,
         ):
-            log.info("got ping command!")
-        await ctx.respond(f"pong! ({self.bot.latency * 1000:.2f} ms)")
+            log.info('got ping command!')
+        await ctx.respond(f'pong! ({self.bot.latency * 1000:.2f} ms)')
 
-    @slash_command(name="reboot", description="Reboots the bot (Owner only)")
+    @slash_command(name='reboot', description='Reboots the bot (Owner only)')
     @commands.is_owner()
     async def reboot(self, ctx: discord.ApplicationContext):
         with log.contextualize(
@@ -57,18 +57,18 @@ class Ping(commands.Cog):
             channel=ctx.channel.name,
             server=ctx.guild.name,
         ):
-            log.info("got reboot command!")
+            log.info('got reboot command!')
         """Reboots the bot"""
         try:
-            await ctx.respond("Rebooting...", ephemeral=True)
+            await ctx.respond('Rebooting...', ephemeral=True)
 
             # Get paths
             cogs_dir = os.path.dirname(os.path.abspath(__file__))
             bot_dir = os.path.dirname(cogs_dir)
 
-            restart_path = os.path.join(bot_dir, "reboot_bot.bat")
-            if platform.system() == "Linux":
-                restart_path = os.path.join(bot_dir, "reboot_bot.sh")
+            restart_path = os.path.join(bot_dir, 'reboot_bot.bat')
+            if platform.system() == 'Linux':
+                restart_path = os.path.join(bot_dir, 'reboot_bot.sh')
 
             reboot.make_executable(restart_path)
             # Start the restart script
@@ -82,7 +82,7 @@ class Ping(commands.Cog):
 
         except Exception as e:
             self.log.exception(e)
-            await ctx.respond(f"Error during reboot: {str(e)}", ephemeral=True)
+            await ctx.respond(f'Error during reboot: {str(e)}', ephemeral=True)
 
 
 def setup(bot):

@@ -1,13 +1,14 @@
-from loguru import logger
 import sys
+
 import discord
+from loguru import logger
 
 globalFormat = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss}</green>| "
-    "<level>{level: <8}</level>| "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-    "<level>{message}</level>"
-    " {extra}"
+    '<green>{time:YYYY-MM-DD HH:mm:ss}</green>| '
+    '<level>{level: <8}</level>| '
+    '<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - '
+    '<level>{message}</level>'
+    ' {extra}'
 )
 
 
@@ -20,16 +21,16 @@ def setup_logging():
         sys.stdout,
         colorize=True,
         format=globalFormat,
-        level="TRACE",  # Capture all log levels from DEBUG upwards
+        level='TRACE',  # Capture all log levels from DEBUG upwards
     )
     logger.add(
-        "app.log",
-        rotation="100 MB",
+        'app.log',
+        rotation='100 MB',
         format=globalFormat,
-        level="TRACE",
+        level='TRACE',
     )
 
-    logger.level("INFO", color="<light-white>")
+    logger.level('INFO', color='<light-white>')
     return logger
 
 

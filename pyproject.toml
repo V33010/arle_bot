@@ -11,6 +11,7 @@ dependencies = [
     "lyricsgenius>=3.0.1",
     "mutagen>=1.47.0",
     "pillow>=11.0.0",
+    "pre-commit>=4.0.1",
     "py-cord>=2.6.1",
     "pydantic>=2.10.1",
     "pydub>=0.25.1",
@@ -20,3 +21,17 @@ dependencies = [
     "selenium>=4.26.1",
     "typer>=0.13.1",
 ]
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint] # linter rules
+extend-select = ["E501"] # autofix line length errors
+ignore = ["E501"]
+# pyflakes, pycodestyle, isort
+select = ["F", "E", "W", "I001"]
+
+[tool.ruff.format] # formatter rules
+quote-style = "single"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+exclude = ["generated"]

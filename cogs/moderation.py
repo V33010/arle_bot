@@ -28,37 +28,37 @@ class Moderation(commands.Cog):
                 user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
             ):
                 log.warning(
-                    f"User {ctx.author.name} tried to use an admin-only command without proper permissions."
+                    f'User {ctx.author.name} tried to use an admin-only command without proper permissions.'
                 )
 
             await ctx.respond(
-                "You do not have the permissions to use this command.",
+                'You do not have the permissions to use this command.',
                 ephemeral=True,
             )
             return False
         return True
 
     @commands.slash_command(
-        name="assign_bots",
+        name='assign_bots',
         description="Assign the 'bot' role to all bots in the server",
     )
     async def assign_bots(self, ctx: discord.ApplicationContext):
         with log.contextualize(
             user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
         ):
-            await ctx.respond("Assigning bots...")
-            log.info("Got assign_bots command")
+            await ctx.respond('Assigning bots...')
+            log.info('Got assign_bots command')
 
             # Ensure the 'bot' role exists or create it
-            bot_role = await self.ensure_role(ctx, "bot", discord.Color(0xCC967A))
+            bot_role = await self.ensure_role(ctx, 'bot', discord.Color(0xCC967A))
             if not bot_role:
                 await ctx.followup.send("Failed to create or find the 'bot' role.")
                 return
 
             # Check permissions
             if not ctx.guild.me.guild_permissions.manage_roles:
-                log.warning("Not enough permissions to manage roles.")
-                await ctx.followup.send("I do not have permission to manage roles.")
+                log.warning('Not enough permissions to manage roles.')
+                await ctx.followup.send('I do not have permission to manage roles.')
                 return
 
             if ctx.guild.me.top_role <= bot_role:
@@ -81,31 +81,31 @@ class Moderation(commands.Cog):
                 await asyncio.gather(*tasks)
                 count = len(tasks)
             except Exception as e:
-                log.error(f"Error assigning roles: {e}")
-                await ctx.followup.send("An error occurred while assigning bot roles.")
+                log.error(f'Error assigning roles: {e}')
+                await ctx.followup.send('An error occurred while assigning bot roles.')
                 return
 
             # Respond with the result
             await ctx.followup.send(f"Assigned the 'bot' role to {count} bots.")
 
     @commands.slash_command(
-        name="assign_members",
+        name='assign_members',
         description="Assign the 'member' role to all non-bot members in the server",
     )
     async def assign_members(self, ctx: discord.ApplicationContext):
         with log.contextualize(
             user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
         ):
-            log.info("Got assign_members command")
-            await ctx.respond("Assigning Members...")
+            log.info('Got assign_members command')
+            await ctx.respond('Assigning Members...')
 
-            member_role = await self.ensure_role(ctx, "member", discord.Color(0x1ABC9C))
+            member_role = await self.ensure_role(ctx, 'member', discord.Color(0x1ABC9C))
             if not member_role:
                 await ctx.followup.send("Failed to create or find the 'member' role.")
                 return
 
             if not ctx.guild.me.guild_permissions.manage_roles:
-                await ctx.followup.send("I do not have permission to manage roles.")
+                await ctx.followup.send('I do not have permission to manage roles.')
                 return
 
             if ctx.guild.me.top_role <= member_role:
@@ -128,33 +128,31 @@ class Moderation(commands.Cog):
                 await asyncio.gather(*tasks)
                 count = len(tasks)
             except Exception as e:
-                log.error(f"Errror in assigning roles: {e}")
-                await ctx.followup.send(
-                    "An error occurred while assigning member roles."
-                )
+                log.error(f'Errror in assigning roles: {e}')
+                await ctx.followup.send('An error occurred while assigning member roles.')
 
             await ctx.followup.send(f"Assigned the 'member' role to {count} members.")
 
     @commands.slash_command(
-        name="clear_chat", description="sends a long empty message to clear the chat"
+        name='clear_chat', description='sends a long empty message to clear the chat'
     )
     # should send a long empty message to clear the chat (not deleting messages)
     async def clear_chat(self, ctx: discord.ApplicationContext):
         with log.contextualize(
             user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
         ):
-            log.info("Got clear_chat command")
+            log.info('Got clear_chat command')
         await ctx.defer()
 
         if not ctx.guild.me.guild_permissions.manage_messages:
-            await ctx.followup.send("I do not have permission to manage messages.")
+            await ctx.followup.send('I do not have permission to manage messages.')
             return
 
-        await ctx.followup.send("." + "\n" * 50 + ".")
+        await ctx.followup.send('.' + '\n' * 50 + '.')
 
     @commands.slash_command(
-        name="delete_user_messages",
-        description="Delete a specified number of messages from a user in a specific channel",
+        name='delete_user_messages',
+        description='Delete a specified number of messages from a user in a specific channel',
     )
     async def delete_user_messages(
         self,
@@ -166,12 +164,12 @@ class Moderation(commands.Cog):
         with log.contextualize(
             user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
         ):
-            log.info(f"Got delete_user_messages command for {username}")
+            log.info(f'Got delete_user_messages command for {username}')
         await ctx.defer()
 
         # Check permissions
         if not ctx.guild.me.guild_permissions.manage_messages:
-            await ctx.followup.send("I do not have permission to manage messages.")
+            await ctx.followup.send('I do not have permission to manage messages.')
             return
 
         # Find the user
@@ -193,45 +191,41 @@ class Moderation(commands.Cog):
                     break
 
         await ctx.followup.send(
-            f"Deleted {deleted_count} messages from {username} in {channel.mention}."
+            f'Deleted {deleted_count} messages from {username} in {channel.mention}.'
         )
 
     @commands.slash_command(
-        name="delete_messages",
-        description="Delete the N latest messages in the current channel",
+        name='delete_messages',
+        description='Delete the N latest messages in the current channel',
     )
-    async def delete_messages(
-        self, ctx: discord.ApplicationContext, message_count: int
-    ):
+    async def delete_messages(self, ctx: discord.ApplicationContext, message_count: int):
         with log.contextualize(
             user=ctx.author.name, channel=ctx.channel.name, server=ctx.guild.name
         ):
-            log.info("Got delete_messages command ")
-            log.info(f"deleting {message_count} messages")
+            log.info('Got delete_messages command ')
+            log.info(f'deleting {message_count} messages')
 
         await ctx.defer()
 
         # Check permissions
         if not ctx.guild.me.guild_permissions.manage_messages:
-            await ctx.followup.send("I do not have permission to manage messages.")
+            await ctx.followup.send('I do not have permission to manage messages.')
             return
 
         # Ensure the message count is valid
         if message_count < 1:
-            await ctx.followup.send(
-                "Please provide a valid number of messages to delete."
-            )
+            await ctx.followup.send('Please provide a valid number of messages to delete.')
             return
 
         # Fetch and delete the messages
         deleted_count = 0
         async for message in ctx.channel.history(limit=message_count + 1):
             await message.delete()
-            log.debug(f"deleting message : {message.content}")
+            log.debug(f'deleting message : {message.content}')
             deleted_count += 1
 
         await ctx.send(
-            f"Deleted {deleted_count-1} messages in {ctx.channel.mention}.",
+            f'Deleted {deleted_count-1} messages in {ctx.channel.mention}.',
         )
 
 

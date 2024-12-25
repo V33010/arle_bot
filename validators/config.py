@@ -1,15 +1,16 @@
-from pydantic import HttpUrl, field_validator, ValidationInfo, ConfigDict
-from pydantic import BaseModel as bmod
 from typing import Literal
+
+from pydantic import BaseModel as bmod
+from pydantic import ConfigDict, HttpUrl, ValidationInfo, field_validator
 
 
 class CustomBaseModel(bmod):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra='forbid')
 
 
 class arleConfig(CustomBaseModel):
     version: str
-    log_level: Literal["info", "debug", "error", "warn", "fatal"]
+    log_level: Literal['info', 'debug', 'error', 'warn', 'fatal']
     log_file: str
     local_music: bool
     dev_mode: bool
@@ -32,21 +33,19 @@ class prodDb(CustomBaseModel):
     database_url: str | None
     database_auth_token: str | None
 
-    @field_validator("database_url")
+    @field_validator('database_url')
     def val_db_url(cls, v: str | None, info: ValidationInfo):
-        dev_mode = info.context.get("dev_mode", False)
+        dev_mode = info.context.get('dev_mode', False)
         if not dev_mode and not v:
-            raise ValueError(
-                "Need production database url when bot is not running in dev mode"
-            )
+            raise ValueError('Need production database url when bot is not running in dev mode')
         return v
 
-    @field_validator("database_auth_token")
+    @field_validator('database_auth_token')
     def val_db_auth_token(cls, v: str | None, info: ValidationInfo):
-        dev_mode = info.context.get("dev_mode", False)
+        dev_mode = info.context.get('dev_mode', False)
         if not dev_mode and not v:
             raise ValueError(
-                "Need production database auth token when bot is not running in dev mode"
+                'Need production database auth token when bot is not running in dev mode'
             )
         return v
 
@@ -65,5 +64,5 @@ class ConfigValidator(CustomBaseModel):
     # Inject context for validators in nested models
     @classmethod
     def model_validate(cls, data):
-        dev_mode = data["arle"]["dev_mode"]
-        return super().model_validate(data, context={"dev_mode": dev_mode})
+        dev_mode = data['arle']['dev_mode']
+        return super().model_validate(data, context={'dev_mode': dev_mode})
