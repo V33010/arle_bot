@@ -1,6 +1,5 @@
 import tomllib
 
-import discord
 import requests
 from bs4 import BeautifulSoup
 from discord.ext import commands
@@ -36,8 +35,6 @@ def search_song_on_genius(song_name):
         search_results = response.json()
         if search_results["response"]["hits"]:
             song_info = search_results["response"]["hits"][0]["result"]
-            song_title = song_info["title"]
-            artist_name = song_info["primary_artist"]["name"]
             song_url = song_info["url"]
             return song_url
         else:

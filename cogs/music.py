@@ -10,7 +10,7 @@ from mutagen.id3 import ID3
 from mutagen.mp3 import MP3
 from pydub import AudioSegment
 
-from utils.logger import log
+from utils.logger import log, get_context_logger
 from validators.config import ConfigValidator
 
 with open(os.path.join("config.toml"), "rb") as f:
@@ -79,6 +79,8 @@ class Music(commands.Cog):
         name="play_music", description="Play a music file in your voice channel."
     )
     async def play_music(self, ctx: discord.ApplicationContext, filename: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info("Got play_music request.")
         await ctx.defer()
         await ctx.respond(f"Loop type: {self.loop_type}")
         if ctx.author.voice is None:
@@ -96,6 +98,7 @@ class Music(commands.Cog):
             vc = ctx.voice_client
 
         await ctx.respond(f"Added {filename} to the queue.")
+        ctxlog.info(f"Added {filename} to the queue.")
 
         self.queue.add_song(filename)
         self.queue.current_index = len(self.queue.queue) - 1
@@ -109,15 +112,20 @@ class Music(commands.Cog):
             discord.FFmpegPCMAudio(filename, **self.FFMPEG_OPTIONS),
             after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
         )
+        ctxlog.success(f"Music started in {voice_channel}.")
         await self.create_now_playing_message(ctx)
+        ctxlog.info("Created now_playing_message through play_music command.")
 
     async def destroy_now_playing_message(self):
         if self.now_playing_message:
             try:
                 await self.now_playing_message.delete()
             except discord.errors.NotFound:
-                print("Now playing message was not found, skipping deletion.")
+                log.error("Now playing message not found, skipping deletion.")
             except discord.errors.HTTPException as e:
+                log.error(
+                    "Received discord.errors.HTTPException with code 50027 in destroy_now_playing_message."
+                )
                 if e.code == 50027:
                     pass
                 else:
@@ -126,7 +134,8 @@ class Music(commands.Cog):
                 self.now_playing_message = None
 
     async def play_next_song(self, ctx):
-        print(f"Queue from play_next_song: {self.queue.queue}")
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"Queue from play_next_song: {self.queue.queue}")
         try:
             await self.destroy_now_playing_message()
             current_song = None
@@ -168,7 +177,7 @@ class Music(commands.Cog):
                 else:
                     print("The bot is not connected to a voice channel.")
         except Exception as e:
-            print(f"Error in play_next_song: {e}")
+            ctxlog.error(f"Error in play_next_song: {e}")
             if ctx.voice_client:
                 current_song = self.get_current_song()
                 ctx.voice_client.play(
@@ -177,9 +186,11 @@ class Music(commands.Cog):
                 )
 
     async def create_now_playing_message(self, ctx):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info("create_now_playing_message invoked")
         try:
             self.message_channel = ctx.channel
-            print(f"current_song: {self.get_current_song()}")
+            ctxlog.info(f"current_song: {self.get_current_song()}")
             if self.get_current_song():
                 audio = ID3(self.get_current_song())
                 song_title = audio.get("TIT2", "Unknown Title")
@@ -202,10 +213,12 @@ class Music(commands.Cog):
             await self.update_now_playing(ctx)
 
         except Exception as e:
-            print(f"Error in create_now_playing_message: {e}")
+            ctxlog.error(f"Error in create_now_playing_message: {e}")
             pass
 
     async def update_now_playing(self, ctx):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info("update_now_playing invoked")
         if (
             self.get_current_song()
             and self.now_playing_message
@@ -234,8 +247,12 @@ class Music(commands.Cog):
                 embed.set_footer(text=f"{elapsed_time_MMSS} / {song_duration_MMSS}")
                 try:
                     await self.now_playing_message.edit(embed=embed)
+                    ctxlog.success("now_playing_message edited successfully!")
                 except discord.errors.HTTPException as e:
                     if e.code == 50027:
+                        ctxlog.error(
+                            f"Received discord.errors.HTTPException with code 50027 in update_now_playing."
+                        )
                         await self.destroy_now_playing_message()
                         self.now_playing_message = await self.message_channel.send(
                             embed=embed
@@ -245,7 +262,7 @@ class Music(commands.Cog):
                 await asyncio.sleep(7.5)
                 await self.update_now_playing(ctx)
             except Exception as e:
-                print(f"Error in update_now_playing: {e}")
+                ctxlog.error(f"Error in update_now_playing: {e}")
                 pass
 
     def create_progress_bar(self, progress):
@@ -258,38 +275,49 @@ class Music(commands.Cog):
         name="add_to_queue", description="Add a music file to the queue."
     )
     async def add_to_queue(self, ctx: discord.ApplicationContext, filename: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used add_to_queue command.")
         if not os.path.isfile(filename):
             await ctx.respond("The specified file does not exist.")
             return
 
         self.queue.add_song(filename)
+        ctxlog.success(f"{filename} added to queue by {ctx.author.name}.")
         await ctx.respond(
             f"Added {filename} to the queue.\nSongs in  queue: {len(self.queue.queue) - self.queue.current_index - 1}"
         )
 
         if not ctx.voice_client or not ctx.voice_client.is_playing():
+            ctxlog.warning(f"{ctx.author.name} added song to empty queue.")
             await self.play_next_song(ctx)
 
     @commands.slash_command(
         name="nowplaying", description="Display the currently playing song."
     )
     async def nowplaying(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used nowplaying command.")
         if not self.get_current_song():
             await ctx.respond("No song is currently playing.")
+            ctxlog.warning(f"No song playing currently.")
             return
         else:
             current_song = self.get_current_song()
             audio = ID3(current_song)
             song_title = audio.get("TIT2", "Unknown Title")
             await ctx.respond(f"Now playing {song_title}.")
+            ctxlog.success(f"Now playing {song_title}.")
 
     @commands.slash_command(
         name="display_queue_long", description="Display the entire queue."
     )
     async def display_queue_long(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used display_queue_long command.")
         total_length = len(self.queue.queue)
         if total_length == 0:
             await ctx.respond("The queue is currently empty.")
+            ctxlog.warning("Queue is currently empty.")
         else:
             print(f"current_index from display_queue_long: {self.queue.current_index}")
             queue_message = ""
@@ -319,14 +347,18 @@ class Music(commands.Cog):
                 ]
                 for chunk in chunks:
                     await ctx.send(chunk)
+                ctxlog.success("Complete queue displayed with chunking.")
             else:
                 await ctx.respond(queue_message)
+                ctxlog.success("Complete queue displayed without chunking.")
 
     @commands.slash_command(
         name="lyrics_from_file",
         description="Fetch and display the lyrics of the currently playing song.",
     )
     async def lyrics(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used lyrics_from_file command.")
         if not self.get_current_song():
             await ctx.respond("No song is currently playing.")
 
@@ -345,17 +377,23 @@ class Music(commands.Cog):
                     ]
                     for chunk in chunks:
                         await ctx.send(chunk)
+                    ctxlog.success("Lyrics sent successfully with chunking.")
                 elif lyrics_text:
                     await ctx.send(lyrics_text)
+                    ctxlog.success("Lyrics sent successfully without chunking.")
             else:
+                ctxlog.warning("No lyrics found for the currently playing song.")
                 await ctx.respond("No lyrics found for the currently playing song.")
         except Exception as e:
+            ctxlog.error(f"Error in fetching lyrics: {e}")
             await ctx.respond(f"Error fetching lyrics: {e}")
 
     @commands.slash_command(
         name="past_songs", description="Display the previously played songs."
     )
     async def past_songs(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command past_songs.")
         if self.queue.current_index < 1:
             await ctx.respond("There are no past songs.")
         else:
@@ -369,12 +407,19 @@ class Music(commands.Cog):
                 ]
                 for chunk in chunks:
                     await ctx.send(chunk)
+                ctxlog.success("Past songs displayed with chunking.")
             else:
+                ctxlog.success("Past songs displayed without chunking.")
                 await ctx.respond(past_songs)
 
-    @commands.slash_command(name="previous", description="Play the previous song.")
+    @commands.slash_command(
+        name="previous", description="Play the previous song."
+    )  # BUG: Using this command causes Error in update_now_playing: 404 Not Found (Error code: 10008)
     async def previous(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command previous.")
         await ctx.defer()
+        ctxlog.debug(f"Current index initially: {self.queue.current_index}")
 
         if self.queue.current_index < 1:
             await ctx.respond("No previously played songs.")
@@ -384,37 +429,56 @@ class Music(commands.Cog):
             self.queue.current_index -= 2
         if self.queue.current_index == -1:
             self.queue.current_index = 0  # TODO fix the need to use this approach. The current method does not allow the first song from the queue to be played.
+        ctxlog.debug(f"Current index after manual update: {self.queue.current_index}")
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
+            ctxlog.success("Current song stopped successfully.")
 
     @commands.slash_command(name="skip", description="Skip the current song.")
     async def skip(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command skip")
         if ctx.voice_client is None or not ctx.voice_client.is_playing():
             await ctx.respond("No music playing to be skipped.")
             return
 
         current_song_title = ID3(self.get_current_song()).get("TIT2", "Unknown Title")
+        ctxlog.info("Stopping current song...")
         ctx.voice_client.stop()
 
         await ctx.respond(f"Skipped {current_song_title}")
+        ctxlog.success("Skipped current song.")
 
-    @commands.slash_command(name="pause", description="Pause the current song.")
+    @commands.slash_command(
+        name="pause", description="Pause the current song."
+    )  # BUG: time does not pause when using this command leading to unusual behaviour in create_progress_bar
     async def pause(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command pause.")
         if ctx.voice_client is None or not ctx.voice_client.is_playing():
+            ctxlog.warning("No music playing")
             await ctx.respond("No music playing.")
             return
 
         ctx.voice_client.pause()
         await self.destroy_now_playing_message()
+        ctxlog.debug("Destroyed now_playing_message")
         await ctx.respond("Paused the song.")
+        ctxlog.success("Paused music playback.")
 
-    @commands.slash_command(name="play", description="Resume playing the paused song.")
+    @commands.slash_command(
+        name="resume", description="Resume playing the paused song."
+    )
     async def play(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command resume")
         if ctx.voice_client is None:
             await ctx.respond("No music queued.")
+            ctxlog.warning("Tried using resume command for an empty queue.")
             return
 
         if ctx.voice_client.is_playing():
+            ctxlog.warning("Tried using resume command while music playback is active")
             await ctx.respond("Music already playing.")
 
         if ctx.voice_client.is_paused():
@@ -422,7 +486,9 @@ class Music(commands.Cog):
             await ctx.respond(
                 f"Resumed playing {str(ID3(self.get_current_song()).get('TIT2', 'Unknown Title'))}"
             )
+            ctxlog.success("Resumed music playback.")
             await self.create_now_playing_message(ctx)
+            ctxlog.success("Created now_playing_message")
         else:
             await ctx.respond("No music queued.")
 
@@ -430,11 +496,16 @@ class Music(commands.Cog):
         name="stop", description="Stop the music and clear the queue."
     )
     async def stop(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command stop")
         await self.destroy_now_playing_message()
+        ctxlog.debug(f"Destroyed now_playing_message")
         self.queue.queue = []
         self.queue.current_index = -1
+        ctxlog.debug("Cleared the queue and set self.current_index = -1")
 
         if ctx.voice_client is None:
+            ctxlog.warning("Tried using stop command without music playback.")
             await ctx.respond("No music playing.")
             return
 
@@ -443,14 +514,18 @@ class Music(commands.Cog):
         await ctx.respond(
             "Stopped the music, cleared the queue, and disconnected from the voice channel."
         )
+        ctxlog.success("Stopped music playback successfully.")
 
     @commands.slash_command(
         name="play_playlist",
         description="Play all audio files in the specified folder.",
     )
     async def play_playlist(self, ctx: discord.ApplicationContext, folder: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command play_playlist.")
         if not os.path.isdir(folder):
             await ctx.respond("The specified folder does not exist.")
+            ctxlog.warning(f"Specified folder does not exist: {folder}")
             return
 
         temp_queue = []
@@ -465,6 +540,7 @@ class Music(commands.Cog):
             self.queue.add_song(song)
 
         if ctx.author.voice is None:
+            ctxlog.warning("Used command without joining a voice channel")
             await ctx.respond("You need to join a voice channel first.")
             return
         voice_channel = ctx.author.voice.channel
@@ -474,6 +550,7 @@ class Music(commands.Cog):
         else:
             vc = ctx.voice_client
 
+        ctxlog.debug("Added songs to queue.")
         await ctx.respond(f"Added and shuffled all audio files from {folder} to queue.")
         if self.queue.current_index == 0:
             self.song_start_time = time.time()
@@ -491,6 +568,8 @@ class Music(commands.Cog):
         description="Display the next 10 songs and total songs in queue",
     )
     async def display_queue(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command display_queue")
         if len(self.queue.queue) == 0:
             await ctx.respond("The queue is currently empty.")
             return
@@ -507,7 +586,11 @@ class Music(commands.Cog):
                 next_song_titles.append(
                     str(ID3(next_songs[i]).get("TIT2", "Unknown Title"))
                 )
+                ctxlog.debug(f"Title found for {next_songs[i]}")
             except Exception:
+                ctxlog.debug(
+                    f"Title not found for {next_songs[i]}, using filename for display"
+                )
                 next_song_titles.append(next_songs[i])
         n = 10
         if len(next_song_titles) < 10:
@@ -519,11 +602,14 @@ class Music(commands.Cog):
         queue_message += f"\n\nTotal songs in queue: {total_songs}"
 
         await ctx.respond(queue_message)
+        ctxlog.success("Sent display_queue successfully!")
 
     @commands.slash_command(
         name="shuffle", description="Shuffle all the remaining songs in the queue."
     )
     async def shuffle(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command shuffle")
         if len(self.queue.queue) == 0:
             await ctx.respond("The queue is empty.")
             return
@@ -534,22 +620,29 @@ class Music(commands.Cog):
         self.queue.queue = (
             self.queue.queue[: self.queue.current_index + 1] + remaining_songs
         )
+        ctxlog.success("Shuffled the songs and updated the queue.")
 
         await ctx.respond("Shuffled the remaining songs in the queue.")
 
     @commands.slash_command(name="loop_once", description="Loop the current song")
     async def loop_once(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
         self.loop_type = "once"
+        ctxlog.info("Loop type set to 'once'")
         await ctx.respond("Enabled loop for the current song.")
 
     @commands.slash_command(name="loop_all", description="Loop all songs in queue")
     async def loop_all(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
         self.loop_type = "all"
+        ctxlog.info("Loop type set to 'all'")
         await ctx.respond("Enabled loop for the queue.")
 
     @commands.slash_command(name="loop_off", description="Disable looping")
     async def loop_off(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
         self.loop_type = None
+        ctxlog.info("Loop type set to 'None'")
         await ctx.respond("Disabled looping.")
 
 
