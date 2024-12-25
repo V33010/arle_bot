@@ -22,7 +22,9 @@ def main():
         arle_config: ConfigValidator = ConfigValidator.model_validate(data)
         print("got here")
         log.success("Validated config successfully")
-        log.debug(f"Config file \n{arle_config.model_dump_json(indent=4)}")
+        log.debug(
+            f"Config file \n{arle_config.model_dump_json(indent=4,exclude="secrets")}"
+        )
     except ValidationError as v:
         log.error("invalid config file, cannot start up")
         log.error(v)
