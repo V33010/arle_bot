@@ -1,6 +1,7 @@
 import asyncio
 import random
 import time
+import traceback
 
 import discord
 from discord.ext import commands
@@ -50,9 +51,7 @@ class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.queue = MusicQueue()
-        self.loop_type = None  # "once"  # can be "all", "once" or None
-        self.song_start_time = None
-        self.song_duration = None
+        self.loop_type = None  # can be "all", "once" or None
         self.FFMPEG_OPTIONS = {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
             "options": '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
@@ -63,7 +62,6 @@ class Music(commands.Cog):
             "noplaylist": True,
             "quiet": True,
             "extract_flat": False,
-            # Add these options to help with stream stability
             "socket_timeout": 10,
             "retries": 5,
             "nocheckcertificate": True,
@@ -148,13 +146,13 @@ class Music(commands.Cog):
 
             if current_song and ctx.voice_client:
                 url, title = current_song
-                self.song_start_time = time.time()
+                # self.song_start_time = time.time()
 
                 # Only try to connect if we're not already connected
                 if ctx.voice_client is None:
                     voice_channel = ctx.author.voice.channel
                     await voice_channel.connect()
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
                 if ctx.voice_client and not ctx.voice_client.is_playing():
                     success = await self.play_audio(
@@ -178,8 +176,6 @@ class Music(commands.Cog):
                     await ctx.voice_client.disconnect()
         except Exception as e:
             log.error(f"Error in play_next_song: {e}")
-            import traceback
-
             log.error(traceback.format_exc())
 
     @commands.slash_command(
@@ -206,7 +202,7 @@ class Music(commands.Cog):
         if ctx.voice_client is None:
             await voice_channel.connect()
             # Add a small delay to ensure connection is stable
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
         # Check if we need to start playing
         if not ctx.voice_client.is_playing():
@@ -214,8 +210,6 @@ class Music(commands.Cog):
                 current_song = self.get_current_song()
                 if current_song:
                     url, title = current_song
-                    self.song_start_time = time.time()
-                    self.song_duration = 180  # Placeholder duration for streams
 
                     ctx.voice_client.play(
                         discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
