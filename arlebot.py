@@ -69,7 +69,7 @@ def main():
     ]
 
     if arle_config.arle.local_music:
-        extensions.append("cogs.music")
+        extensions.append("cogs.music_yt")
     for extension in extensions:
         log.debug(f"loaded {extension} extension")
         bot.load_extension(extension)
