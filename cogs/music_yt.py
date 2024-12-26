@@ -44,7 +44,7 @@ class MusicQueue:
         return None
 
 
-class Music(commands.Cog):
+class MusicYT(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.queue = MusicQueue()
@@ -263,4 +263,4 @@ class Music(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Music(bot))
+    bot.add_cog(MusicYT(bot))
