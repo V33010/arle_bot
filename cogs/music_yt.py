@@ -1,5 +1,8 @@
 # TODO: implement clearing queue after bot disconnects
 # WARN: play_playlist command bugged
+# TODO: handle play_playlist for large playlists
+# TODO: create play_yt_playlist command for handling youtube playlists
+# TODO: shuffle the songs after using play_playlist command
 import asyncio
 import os
 import random
@@ -12,15 +15,45 @@ from yt_dlp import YoutubeDL
 from utils.logger import get_context_logger, log
 
 
+def format_duration(duration: int):
+    # Format duration as minutes:seconds
+    minutes = duration // 60
+    seconds = duration % 60
+    duration_str = f'{minutes}:{seconds:02d}'
+    return duration_str
+
+
 class MusicQueue:
     def __init__(self):
         self.queue = []
+        self.temp_queue = []
         self.current_index = -1
+        self.processing_lock = False
 
-    def add_song(self, song):
-        self.queue.append(song)
+    def add_song(self, song_tuple):
+        self.queue.append(song_tuple)
         if self.current_index == -1:
             self.current_index = 0
+
+    def add_to_temp_queue(self, songs):
+        self.temp_queue.extend(songs)
+
+    def get_temp_queue_size(self):
+        return len(self.temp_queue)
+
+    def get_next_temp_songs(self, count):
+        """Get the next batch of songs from temp queue"""
+        songs = self.temp_queue[:count]
+        self.temp_queue = self.temp_queue[count:]
+        return songs
+
+    def get_loaded_songs(self):
+        """Get all loaded songs with their details"""
+        return [(i + 1, song[1], song[2]) for i, song in enumerate(self.queue)]
+
+    def get_temp_queue_songs(self):
+        """Get all songs in temp queue"""
+        return [(i + 1, song) for i, song in enumerate(self.temp_queue)]
 
     def current_song(self):
         if self.current_index != -1:
@@ -69,6 +102,32 @@ class MusicYT(commands.Cog):
         }
         self.current_url_info = None
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
+        self.INITIAL_SONGS_TO_LOAD = 3
+        self.SONGS_TO_ADD_ON_NEXT = 2
+
+    async def process_temp_queue(self, ctx):
+        """Process songs from temp queue and add them to main queue"""
+        ctxlog = get_context_logger(ctx)
+
+        if self.queue.processing_lock:
+            return
+
+        try:
+            self.queue.processing_lock = True
+            songs_to_process = self.queue.get_next_temp_songs(self.SONGS_TO_ADD_ON_NEXT)
+
+            for song in songs_to_process:
+                url, title, duration = await self.fetch_youtube_url(song)
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    ctxlog.info(f'Processed song from temp queue: {title}')
+                else:
+                    ctxlog.warning(f'Failed to process song from temp queue: {song}')
+
+        except Exception as e:
+            ctxlog.error(f'Error processing temp queue: {e}')
+        finally:
+            self.queue.processing_lock = False
 
     def get_current_song(self):
         return self.queue.current_song()
@@ -89,15 +148,16 @@ class MusicYT(commands.Cog):
                     'webpage_url': video.get('webpage_url') or video.get('url'),
                     'title': video.get('title', 'Unknown Title'),
                 }
+                duration = video.get('duration', 0)
                 log.success('Found video!')
                 log.info(
-                    f"Video URL: {video.get('url')}, Video TITLE: {video.get('title', 'Unknown Title')}"
+                    f"Video URL: {video.get('url')}, Video TITLE: {video.get('title', 'Unknown Title')}, Duration: {duration}"
                 )
-                return video.get('url'), video.get('title', 'Unknown Title')
+                return video.get('url'), video.get('title', 'Unknown Title'), duration
 
             except Exception as e:
                 log.error(f'Error fetching YouTube URL: {e}')
-                return None, None
+                return None, None, None
 
     async def refresh_url(self, stored_info):
         """Refresh the streaming URL for a video"""
@@ -106,13 +166,14 @@ class MusicYT(commands.Cog):
             if stored_info and stored_info['webpage_url']:
                 with YoutubeDL(self.ydl_opts) as ydl:
                     info = ydl.extract_info(stored_info['webpage_url'], download=False)
+                    duration = info.get('duration', 0)
                     log.success(f"URL refreshed successfully: {info.get('url')}")
-                    return info.get('url'), stored_info['title']
+                    return info.get('url'), stored_info['title'], duration
         except Exception as e:
             log.error(f'Error refreshing URL: {e}')
-        return None, None
+        return None, None, None
 
-    async def play_audio(self, ctx, url, title, after=None):
+    async def play_audio(self, ctx, url, title, duration, after=None):
         """Helper function to handle audio playback with error recovery"""
         ctxlog = get_context_logger(ctx)
         ctxlog.info("Function 'play_audio' invoked. ")
@@ -128,7 +189,7 @@ class MusicYT(commands.Cog):
             # Try to refresh the URL and play again
             ctxlog.debug('Trying to refresh URL...')
             if self.current_url_info:
-                new_url, _ = await self.refresh_url(self.current_url_info)
+                new_url, _, new_duration = await self.refresh_url(self.current_url_info)
                 if new_url:
                     try:
                         ctx.voice_client.play(
@@ -143,10 +204,8 @@ class MusicYT(commands.Cog):
 
     async def play_next_song(self, ctx):
         ctxlog = get_context_logger(ctx)
-        queue = [elem[1] for elem in self.queue.queue]
-
-        ctxlog.info(f'Queue from play_next_song: {queue}')
         try:
+            # First determine and play the next song
             current_song = None
             if self.get_current_song():
                 if (
@@ -161,9 +220,8 @@ class MusicYT(commands.Cog):
                     current_song = self.queue.next_song()
 
             if current_song and ctx.voice_client:
-                url, title = current_song
+                url, title, duration = current_song
 
-                # Only try to connect if we're not already connected
                 if ctx.voice_client is None:
                     voice_channel = ctx.author.voice.channel
                     await voice_channel.connect()
@@ -174,18 +232,29 @@ class MusicYT(commands.Cog):
                         ctx,
                         url,
                         title,
+                        duration,
                         after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                     )
-                    ctxlog.success('play_next_song ran successfully')
 
                     if success:
-                        await ctx.followup.send(f'Now playing: {title}')
+                        await ctx.followup.send(
+                            f'Now playing: {title} ({format_duration(duration)})'
+                        )
+
+                        # Now process more songs from temp queue if available
+                        # This happens after the next song has started playing
+                        if self.queue.get_temp_queue_size() > 0:
+                            asyncio.create_task(self.process_temp_queue(ctx))
                     else:
                         await ctx.followup.send('Failed to play the current song, skipping...')
                         await self.play_next_song(ctx)
             else:
                 if ctx.voice_client and not ctx.voice_client.is_playing():
+                    # Process any remaining songs in temp queue before disconnecting
+                    if self.queue.get_temp_queue_size() > 0:
+                        await self.process_temp_queue(ctx)
                     await ctx.voice_client.disconnect()
+
         except Exception as e:
             ctxlog.error(f'Error in play_next_song: {e}')
             ctxlog.error(traceback.format_exc())
@@ -204,13 +273,14 @@ class MusicYT(commands.Cog):
 
         voice_channel = ctx.author.voice.channel
 
-        url, title = await self.fetch_youtube_url(query)
+        url, title, duration = await self.fetch_youtube_url(query)
         if not url:
             await ctx.respond(f"Failed to fetch the song '{query}' from YouTube.")
             return
+        duration_str = format_duration(duration)
 
-        self.queue.add_song((url, title))
-        await ctx.respond(f'Added {title} to the queue.')
+        self.queue.add_song((url, title, duration))
+        await ctx.respond(f'Added {title} ({duration_str})to the queue.')
         ctxlog.info(f'Added {title} to the queue.')
 
         # Connect if not already connected
@@ -224,12 +294,13 @@ class MusicYT(commands.Cog):
             try:
                 current_song = self.get_current_song()
                 if current_song:
-                    url, title = current_song
+                    url, title, duration = current_song
 
                     ctx.voice_client.play(
                         discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
                         after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                     )
+
                     ctxlog.success(f'Music playback started in {voice_channel}')
             except Exception as e:
                 log.error(f'Error starting playback: {e}')
@@ -241,13 +312,13 @@ class MusicYT(commands.Cog):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used add_to_queue command.')
         await ctx.defer()
-        url, title = await self.fetch_youtube_url(query)
+        url, title, duration = await self.fetch_youtube_url(query)
         if not url:
             await ctx.respond('Failed to fetch the song from YouTube.')
             return
 
-        self.queue.add_song((url, title))
-        await ctx.respond(f'Added {title} to the queue.')
+        self.queue.add_song((url, title, duration))
+        await ctx.respond(f'Added {title} ({format_duration(duration)}) to the queue.')
         ctxlog.success(f'{title} added to queue by {ctx.author.name}.')
 
         if not ctx.voice_client or not ctx.voice_client.is_playing():
@@ -282,9 +353,13 @@ class MusicYT(commands.Cog):
             return
         else:
             current_song = self.get_current_song()
-            song_title = current_song[1]
-            await ctx.respond(f'Now playing {song_title}.')
-            ctxlog.success(f'Now playing {song_title}.')
+            if current_song:
+                song_title = current_song[1]
+                duration = current_song[2]
+                await ctx.respond(f'Now playing {song_title} ({format_duration(duration)}).')
+                ctxlog.success(f'Now playing {song_title}.')
+            else:
+                ctxlog.error("Could not find current song in function 'nowplaying'")
 
     @commands.slash_command(name='display_queue_long', description='Display the entire queue.')
     async def display_queue_long(self, ctx: discord.ApplicationContext):
@@ -299,9 +374,23 @@ class MusicYT(commands.Cog):
             queue_message = ''
             for i in range(total_length):
                 if i == self.queue.current_index:
-                    queue_message += str(i) + '. ' + str(self.queue.queue[i][1]) + ' ▶️\n'
+                    queue_message += (
+                        str(i)
+                        + '. ('
+                        + format_duration(self.queue.queue[i][2])
+                        + ') | '
+                        + str(self.queue.queue[i][1])
+                        + ' ▶️\n'
+                    )
                 else:
-                    queue_message += str(i) + '. ' + str(self.queue.queue[i][1]) + '\n'
+                    queue_message += (
+                        str(i)
+                        + '. ('
+                        + format_duration(self.queue.queue[i][2])
+                        + ') | '
+                        + str(self.queue.queue[i][1])
+                        + '\n'
+                    )
             queue_message = (
                 f'Currently playing {self.queue.current_index + 1} of {total_length}\n'
                 + queue_message
@@ -425,12 +514,15 @@ class MusicYT(commands.Cog):
         except IndexError:
             next_songs = self.queue.queue[self.queue.current_index :]
         next_song_titles = [song_info[1] for song_info in next_songs]
+        next_song_durations = [song_info[2] for song_info in next_songs]
         n = 10
         if len(next_song_titles) < 10:
             n = len(next_song_titles)
         queue_message = f'Next {n} songs in queue:\n'
         for i in range(len(next_song_titles)):
-            queue_message += f'\n{i}. {next_song_titles[i]}'
+            queue_message += (
+                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]})'
+            )
         total_songs = len(self.queue.queue[self.queue.current_index :])
         queue_message += f'\n\nTotal songs in queue: {total_songs}'
 
@@ -450,6 +542,9 @@ class MusicYT(commands.Cog):
         random.shuffle(remaining_songs)
         # update the queue
         self.queue.queue = self.queue.queue[: self.queue.current_index + 1] + remaining_songs
+        temp_songs = self.queue.temp_queue
+        random.shuffle(temp_songs)
+        self.queue.temp_queue = temp_songs
         ctxlog.success('Shuffled the songs and updated the queue.')
 
         await ctx.respond('Shuffled the remaining songs in the queue.')
@@ -510,24 +605,21 @@ class MusicYT(commands.Cog):
     async def play_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used play_playlist command with playlist: {playlist_name}')
-        await ctx.defer()  # Defer the response as this might take some time
+        await ctx.defer()
 
-        # Check if user is in a voice channel
         if ctx.author.voice is None:
             await ctx.respond('You need to join a voice channel first.')
             return
 
         voice_channel = ctx.author.voice.channel
-
-        # Ensure the playlist exists
         playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
         if not os.path.exists(playlist_path):
             await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
             ctxlog.warning(f'Playlist not found: {playlist_path}')
             return
 
         try:
-            # Read the playlist file
             with open(playlist_path, 'r', encoding='utf-8') as file:
                 songs = [line.strip() for line in file if line.strip()]
 
@@ -535,59 +627,46 @@ class MusicYT(commands.Cog):
                 await ctx.respond(f"Playlist '{playlist_name}' is empty.")
                 return
 
-            # Connect to voice channel if not already connected
+            # Add all songs to temp queue
+            random.shuffle(songs)
+            self.queue.add_to_temp_queue(songs)
+            total_songs = len(songs)
+
+            # Connect to voice channel if needed
             if ctx.voice_client is None:
                 await voice_channel.connect()
-                await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
+                await asyncio.sleep(0.5)
 
-            # Process each song
-            total_songs = len(songs)
-            processed_songs = []
-            failed_songs = []
-
-            for i, song in enumerate(songs, 1):
-                try:
-                    url, title = await self.fetch_youtube_url(song)
-                    if url:
-                        self.queue.add_song((url, title))
-                        processed_songs.append(title)
-                        ctxlog.info(f'Added song {i}/{total_songs}: {title}')
-                    else:
-                        failed_songs.append(song)
-                        ctxlog.warning(f'Failed to fetch song {i}/{total_songs}: {song}')
-                except Exception as e:
-                    failed_songs.append(song)
-                    ctxlog.error(f'Error processing song {song}: {str(e)}')
-
-            # Prepare response message
-            response_parts = []
-            if processed_songs:
-                response_parts.append(
-                    f"Added {len(processed_songs)} songs to the queue from playlist '{playlist_name}'"
-                )
-            if failed_songs:
-                response_parts.append(
-                    f"Failed to add {len(failed_songs)} songs: {', '.join(failed_songs)}"
-                )
-
-            await ctx.respond('\n'.join(response_parts))
-
-            # Start playback if not already playing
+            # Process first song immediately if nothing is playing
             if not ctx.voice_client.is_playing():
-                try:
-                    current_song = self.get_current_song()
-                    if current_song:
-                        url, title = current_song
-                        ctx.voice_client.play(
-                            discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
-                            after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
-                        )
-                        ctxlog.success(f'Started playing: {title}')
-                except Exception as e:
-                    ctxlog.error(f'Error starting playback: {e}')
-                    if ctx.voice_client:
-                        await ctx.voice_client.disconnect()
-                    await ctx.followup.send('Error starting playback. Please try again.')
+                first_song = self.queue.get_next_temp_songs(1)[0]
+                url, title, duration = await self.fetch_youtube_url(first_song)
+
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    ctx.voice_client.play(
+                        discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                        after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                    )
+                    ctxlog.success(f'Started playing: {title}')
+
+            # Process initial batch of songs
+            initial_songs = self.queue.get_next_temp_songs(self.INITIAL_SONGS_TO_LOAD)
+            processed_count = 0
+            await ctx.respond(f'Loading playlist: "{playlist_name}" with {total_songs} songs.')
+
+            for song in initial_songs:
+                url, title, duration = await self.fetch_youtube_url(song)
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+
+            remaining = self.queue.get_temp_queue_size()
+            await ctx.send(
+                f"Added {processed_count} songs to queue. {remaining} songs remaining in playlist '{playlist_name}'. "
+                f'More songs will be added automatically as the playlist progresses.'
+            )
 
         except Exception as e:
             error_msg = f'Error processing playlist: {str(e)}'
@@ -709,19 +788,15 @@ class MusicYT(commands.Cog):
             return
 
         try:
+            # Read existing content to check if we need a newline
+            with open(playlist_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+
             # Append the song to the playlist file
             with open(playlist_path, 'a', encoding='utf-8') as file:
-                # Add a newline before the song if the file is not empty and doesn't end with newline
-                if os.path.getsize(playlist_path) > 0:
-                    with open(playlist_path, 'r', encoding='utf-8') as check_file:
-                        check_file.seek(0, 2)  # Go to end of file
-                        if check_file.tell() > 0:  # If file is not empty
-                            check_file.seek(-1, 2)  # Go to last character
-                            last_char = check_file.read()
-                            if last_char != '\n':
-                                file.write('\n')
-
-                # Write the song
+                # Add newline if file is not empty and doesn't end with newline
+                if content and not content.endswith('\n'):
+                    file.write('\n')
                 file.write(f'{song}\n')
 
             await ctx.respond(f"Successfully added '{song}' to playlist '{playlist_name}'.")
@@ -731,6 +806,55 @@ class MusicYT(commands.Cog):
             error_msg = f'Error adding song to playlist: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to add song to playlist. Please try again.')
+
+    @commands.slash_command(
+        name='display_temp_queue',
+        description='Display all songs waiting to be processed in the temporary queue',
+    )
+    async def display_temp_queue(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used display_temp_queue command')
+        await ctx.defer()
+
+        temp_songs = self.queue.get_temp_queue_songs()
+
+        if not temp_songs:
+            await ctx.respond('No songs currently in the temporary queue.')
+            return
+
+        # Create formatted message
+        message = ['**Songs Waiting to be Processed:**']
+        for i, title in temp_songs:
+            message.append(f'{i}. {title}')
+
+        # Split message if it's too long
+        formatted_message = '\n'.join(message)
+        if len(formatted_message) > 1900:  # Discord message limit safety
+            chunks = []
+            current_chunk = [message[0]]
+            current_length = len(message[0])
+
+            for line in message[1:]:
+                if current_length + len(line) + 1 > 1900:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = [line]
+                    current_length = len(line)
+                else:
+                    current_chunk.append(line)
+                    current_length += len(line) + 1
+
+            if current_chunk:
+                chunks.append('\n'.join(current_chunk))
+
+            for i, chunk in enumerate(chunks):
+                if i == 0:
+                    await ctx.respond(chunk)
+                else:
+                    await ctx.followup.send(chunk)
+        else:
+            await ctx.respond(formatted_message)
+
+        ctxlog.success('Displayed temp queue songs')
 
 
 def setup(bot):
