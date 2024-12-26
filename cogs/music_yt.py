@@ -1,6 +1,7 @@
 # TODO: implement clearing queue after bot disconnects
 # WARN: play_playlist command bugged
 import asyncio
+import os
 import random
 import traceback
 
@@ -67,6 +68,7 @@ class MusicYT(commands.Cog):
             'nocheckcertificate': True,
         }
         self.current_url_info = None
+        self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
 
     def get_current_song(self):
         return self.queue.current_song()
@@ -472,6 +474,263 @@ class MusicYT(commands.Cog):
         self.loop_type = None
         ctxlog.info("Loop type set to 'None'")
         await ctx.respond('Disabled looping.')
+
+    @commands.slash_command(
+        name='available_playlists', description='Display all available playlists'
+    )
+    async def available_playlists(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used command available_playlists')
+
+        try:
+            # Get all .txt files from the playlists directory
+            playlist_files = [f for f in os.listdir(self.playlists_dir) if f.endswith('.txt')]
+
+            if not playlist_files:
+                await ctx.respond('No playlists available.')
+                ctxlog.warning('No playlist files found in directory')
+                return
+
+            # Create a formatted message with all playlist names
+            playlists_message = 'Available playlists:\n'
+            for i, playlist in enumerate(playlist_files, 1):
+                # Remove the .txt extension for display
+                playlist_name = os.path.splitext(playlist)[0]
+                playlists_message += f'{i}. {playlist_name}\n'
+
+            await ctx.respond(playlists_message)
+            ctxlog.success(f'Successfully displayed {len(playlist_files)} playlists')
+
+        except Exception as e:
+            error_message = f'Error accessing playlists: {str(e)}'
+            ctxlog.error(error_message)
+            await ctx.respond('Unable to access playlists at this time.')
+
+    @commands.slash_command(name='play_playlist', description='Play songs from a playlist file')
+    async def play_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used play_playlist command with playlist: {playlist_name}')
+        await ctx.defer()  # Defer the response as this might take some time
+
+        # Check if user is in a voice channel
+        if ctx.author.voice is None:
+            await ctx.respond('You need to join a voice channel first.')
+            return
+
+        voice_channel = ctx.author.voice.channel
+
+        # Ensure the playlist exists
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+        if not os.path.exists(playlist_path):
+            await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
+            ctxlog.warning(f'Playlist not found: {playlist_path}')
+            return
+
+        try:
+            # Read the playlist file
+            with open(playlist_path, 'r', encoding='utf-8') as file:
+                songs = [line.strip() for line in file if line.strip()]
+
+            if not songs:
+                await ctx.respond(f"Playlist '{playlist_name}' is empty.")
+                return
+
+            # Connect to voice channel if not already connected
+            if ctx.voice_client is None:
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
+
+            # Process each song
+            total_songs = len(songs)
+            processed_songs = []
+            failed_songs = []
+
+            for i, song in enumerate(songs, 1):
+                try:
+                    url, title = await self.fetch_youtube_url(song)
+                    if url:
+                        self.queue.add_song((url, title))
+                        processed_songs.append(title)
+                        ctxlog.info(f'Added song {i}/{total_songs}: {title}')
+                    else:
+                        failed_songs.append(song)
+                        ctxlog.warning(f'Failed to fetch song {i}/{total_songs}: {song}')
+                except Exception as e:
+                    failed_songs.append(song)
+                    ctxlog.error(f'Error processing song {song}: {str(e)}')
+
+            # Prepare response message
+            response_parts = []
+            if processed_songs:
+                response_parts.append(
+                    f"Added {len(processed_songs)} songs to the queue from playlist '{playlist_name}'"
+                )
+            if failed_songs:
+                response_parts.append(
+                    f"Failed to add {len(failed_songs)} songs: {', '.join(failed_songs)}"
+                )
+
+            await ctx.respond('\n'.join(response_parts))
+
+            # Start playback if not already playing
+            if not ctx.voice_client.is_playing():
+                try:
+                    current_song = self.get_current_song()
+                    if current_song:
+                        url, title = current_song
+                        ctx.voice_client.play(
+                            discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                            after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                        )
+                        ctxlog.success(f'Started playing: {title}')
+                except Exception as e:
+                    ctxlog.error(f'Error starting playback: {e}')
+                    if ctx.voice_client:
+                        await ctx.voice_client.disconnect()
+                    await ctx.followup.send('Error starting playback. Please try again.')
+
+        except Exception as e:
+            error_msg = f'Error processing playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond(error_msg)
+
+    @commands.slash_command(name='create_playlist', description='Create a new empty playlist')
+    async def create_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used create_playlist command with name: {playlist_name}')
+
+        # Clean the playlist name to prevent directory traversal and ensure it's safe
+        playlist_name = ''.join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_'))
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
+        try:
+            # Check if playlist already exists
+            if os.path.exists(playlist_path):
+                await ctx.respond(f"A playlist named '{playlist_name}' already exists.")
+                ctxlog.warning(f'Attempted to create existing playlist: {playlist_name}')
+                return
+
+            # Create the playlists directory if it doesn't exist
+            os.makedirs(self.playlists_dir, exist_ok=True)
+
+            # Create the empty playlist file
+            with open(playlist_path, 'w', encoding='utf-8') as _:
+                pass  # Creates an empty file
+
+            await ctx.respond(f"Successfully created playlist '{playlist_name}'.")
+            ctxlog.success(f'Created new playlist: {playlist_name}')
+
+        except Exception as e:
+            error_msg = f'Error creating playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to create playlist. Please try again.')
+
+    @commands.slash_command(
+        name='show_playlist', description='Display the contents of a specific playlist'
+    )
+    async def show_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used show_playlist command for playlist: {playlist_name}')
+
+        # Build the playlist path
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
+        # Check if playlist exists
+        if not os.path.exists(playlist_path):
+            await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
+            ctxlog.warning(f'Attempted to show non-existent playlist: {playlist_name}')
+            return
+
+        try:
+            # Read the playlist file
+            with open(playlist_path, 'r', encoding='utf-8') as file:
+                songs = [line.strip() for line in file if line.strip()]
+
+            if not songs:
+                await ctx.respond(f"Playlist '{playlist_name}' is empty.")
+                ctxlog.info(f'Displayed empty playlist: {playlist_name}')
+                return
+
+            # Create the message
+            message = f"Contents of playlist '{playlist_name}':\n"
+            for i, song in enumerate(songs, 1):
+                message += f'{i}. {song}\n'
+
+            # Handle messages that might exceed Discord's character limit
+            if len(message) > 2000:
+                # Split into chunks of 2000 characters, trying to break at newlines
+                chunks = []
+                current_chunk = ''
+
+                for line in message.split('\n'):
+                    if len(current_chunk) + len(line) + 1 > 2000:
+                        chunks.append(current_chunk)
+                        current_chunk = line + '\n'
+                    else:
+                        current_chunk += line + '\n'
+
+                if current_chunk:
+                    chunks.append(current_chunk)
+
+                # Send chunks
+                await ctx.respond(chunks[0])
+                for chunk in chunks[1:]:
+                    await ctx.followup.send(chunk)
+            else:
+                await ctx.respond(message)
+
+            ctxlog.success(
+                f'Successfully displayed playlist: {playlist_name} with {len(songs)} songs'
+            )
+
+        except Exception as e:
+            error_msg = f'Error reading playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to read playlist. Please try again.')
+
+    @commands.slash_command(
+        name='add_song_to_playlist', description='Add a song to an existing playlist'
+    )
+    async def add_song_to_playlist(
+        self, ctx: discord.ApplicationContext, playlist_name: str, song: str
+    ):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(
+            f'{ctx.author.name} used add_song_to_playlist command for playlist: {playlist_name}'
+        )
+
+        # Build the playlist path
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
+        # Check if playlist exists
+        if not os.path.exists(playlist_path):
+            await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
+            ctxlog.warning(f'Attempted to add song to non-existent playlist: {playlist_name}')
+            return
+
+        try:
+            # Append the song to the playlist file
+            with open(playlist_path, 'a', encoding='utf-8') as file:
+                # Add a newline before the song if the file is not empty and doesn't end with newline
+                if os.path.getsize(playlist_path) > 0:
+                    with open(playlist_path, 'r', encoding='utf-8') as check_file:
+                        check_file.seek(0, 2)  # Go to end of file
+                        if check_file.tell() > 0:  # If file is not empty
+                            check_file.seek(-1, 2)  # Go to last character
+                            last_char = check_file.read()
+                            if last_char != '\n':
+                                file.write('\n')
+
+                # Write the song
+                file.write(f'{song}\n')
+
+            await ctx.respond(f"Successfully added '{song}' to playlist '{playlist_name}'.")
+            ctxlog.success(f'Added song to playlist {playlist_name}: {song}')
+
+        except Exception as e:
+            error_msg = f'Error adding song to playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to add song to playlist. Please try again.')
 
 
 def setup(bot):
