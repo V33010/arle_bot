@@ -1,8 +1,5 @@
 # TODO: implement clearing queue after bot disconnects
-# WARN: play_playlist command bugged
-# TODO: handle play_playlist for large playlists
 # TODO: create play_yt_playlist command for handling youtube playlists
-# TODO: shuffle the songs after using play_playlist command
 import asyncio
 import os
 import random
@@ -237,16 +234,14 @@ class MusicYT(commands.Cog):
                     )
 
                     if success:
-                        await ctx.followup.send(
-                            f'Now playing: {title} ({format_duration(duration)})'
-                        )
+                        await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
 
                         # Now process more songs from temp queue if available
                         # This happens after the next song has started playing
                         if self.queue.get_temp_queue_size() > 0:
                             asyncio.create_task(self.process_temp_queue(ctx))
                     else:
-                        await ctx.followup.send('Failed to play the current song, skipping...')
+                        await ctx.send('Failed to play the current song, skipping...')
                         await self.play_next_song(ctx)
             else:
                 if ctx.voice_client and not ctx.voice_client.is_playing():
@@ -254,6 +249,9 @@ class MusicYT(commands.Cog):
                     if self.queue.get_temp_queue_size() > 0:
                         await self.process_temp_queue(ctx)
                     await ctx.voice_client.disconnect()
+                    # self.queue.queue = []
+                    # self.queue.temp_queue = []
+                    # self.queue.current_index = -1
 
         except Exception as e:
             ctxlog.error(f'Error in play_next_song: {e}')
@@ -468,6 +466,7 @@ class MusicYT(commands.Cog):
         if ctx.voice_client.is_playing():
             ctxlog.warning('Tried using resume command while music playback is active')
             await ctx.respond('Music already playing.')
+            return
 
         if ctx.voice_client.is_paused():
             ctx.voice_client.resume()
