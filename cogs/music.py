@@ -404,6 +404,7 @@ class Music(commands.Cog):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
             ctxlog.success('Current song stopped successfully.')
+            ctx.respond('Playing previous song.')
 
     @commands.slash_command(name='skip', description='Skip the current song.')
     async def skip(self, ctx: discord.ApplicationContext):
