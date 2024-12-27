@@ -579,7 +579,22 @@ class MusicYT(commands.Cog):
         self.queue.temp_queue = temp_songs
         ctxlog.success('Shuffled the songs and updated the queue.')
 
+        # Get all remaining songs if less than 5, otherwise get next 5
+        next_songs = self.queue.queue[self.queue.current_index + 1 :]
+        if len(next_songs) > 5:
+            next_songs = next_songs[:5]
+            ctxlog.info('Showing next 5 songs after shuffle')
+        else:
+            ctxlog.info(f'Showing all {len(next_songs)} remaining songs after shuffle')
+
+        # Create message for next songs
+        next_songs_message = 'Next songs after shuffle:\n'
+        for i, song in enumerate(next_songs, 1):
+            _, title, duration = song
+            next_songs_message += f'{i}. ({format_duration(duration)}) | {title}\n'
+
         await ctx.respond('Shuffled the remaining songs in the queue.')
+        await ctx.followup.send(next_songs_message)
 
     @commands.slash_command(name='loop_once', description='Loop the current song')
     async def loop_once(self, ctx: discord.ApplicationContext):
