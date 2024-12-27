@@ -392,6 +392,7 @@ class MusicYT(commands.Cog):
     @commands.slash_command(name='display_queue_long', description='Display the entire queue.')
     async def display_queue_long(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
+        await ctx.defer()
         ctxlog.info(f'{ctx.author.name} used display_queue_long command.')
         total_length = len(self.queue.queue)
         if total_length == 0:
@@ -424,6 +425,7 @@ class MusicYT(commands.Cog):
                 + queue_message
             )
             if len(queue_message) > 2000:
+                ctx.respond('Showing complete queue...')
                 chunks = [queue_message[i : i + 2000] for i in range(0, len(queue_message), 2000)]
                 for chunk in chunks:
                     await ctx.send(chunk)
@@ -939,6 +941,51 @@ class MusicYT(commands.Cog):
 
         await ctx.respond(f'Skipped {skip_count} songs.')
         ctxlog.success(f'Successfully skipped {skip_count} songs')
+
+    @commands.slash_command(
+        name='jump', description='Jump to a specific song in the queue by its number.'
+    )
+    async def jump(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command 'jump' with number: {number}")
+
+        # Check if music is playing
+        if ctx.voice_client is None or not ctx.voice_client.is_playing():
+            await ctx.respond('No music playing.')
+            ctxlog.warning('Used jump command without music playback.')
+            return
+
+        # Try to convert input to integer
+        try:
+            jump_index = int(number)
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Check if the index is within queue bounds
+        if jump_index < 0 or jump_index >= len(self.queue.queue):
+            await ctx.respond(
+                f'Invalid song number. Please use a number between 0 and {len(self.queue.queue) - 1}'
+            )
+            ctxlog.warning(f'Jump index out of range: {jump_index}')
+            return
+
+        # Store target song name for message
+        target_song = self.queue.queue[jump_index][1]
+
+        # Store current song for message
+        current_song = self.get_current_song()[1]
+
+        # Set the index to one less than target because stop() will trigger play_next_song which increments by 1
+        self.queue.current_index = jump_index - 1
+
+        # Stop current song which will trigger play_next_song
+        ctxlog.info('Stopping current song...')
+        ctx.voice_client.stop()
+
+        await ctx.respond(f'Jumped from "{current_song}" to "{target_song}"')
+        ctxlog.success(f'Successfully jumped to index {jump_index}')
 
 
 def setup(bot):
