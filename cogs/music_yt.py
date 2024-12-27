@@ -139,30 +139,6 @@ class MusicYT(commands.Cog):
         finally:
             self.queue.processing_lock = False
 
-    # async def process_temp_queue(self, ctx):
-    #     """Process songs from temp queue and add them to main queue"""
-    #     ctxlog = get_context_logger(ctx)
-    #
-    #     if self.queue.processing_lock:
-    #         return
-    #
-    #     try:
-    #         self.queue.processing_lock = True
-    #         songs_to_process = self.queue.get_next_temp_songs(self.SONGS_TO_ADD_ON_NEXT)
-    #
-    #         for song in songs_to_process:
-    #             url, title, duration = await self.fetch_youtube_url(song)
-    #             if url:
-    #                 self.queue.add_song((url, title, duration))
-    #                 ctxlog.info(f'Processed song from temp queue: {title}')
-    #             else:
-    #                 ctxlog.warning(f'Failed to process song from temp queue: {song}')
-    #
-    #     except Exception as e:
-    #         ctxlog.error(f'Error processing temp queue: {e}')
-    #     finally:
-    #         self.queue.processing_lock = False
-
     def get_current_song(self):
         return self.queue.current_song()
 
@@ -205,33 +181,6 @@ class MusicYT(commands.Cog):
         except Exception as e:
             log.error(f'Error in async YouTube fetch: {e}')
             return None, None, None
-
-    # async def fetch_youtube_url(self, query):
-    #     with YoutubeDL(self.ydl_opts) as ydl:
-    #         try:
-    #             search_query = f'ytsearch:{query}' if not query.startswith('http') else query
-    #             log.debug(f"Fetching '{search_query}' from YouTube.")
-    #             info = ydl.extract_info(search_query, download=False)
-    #             if 'entries' in info:
-    #                 video = info['entries'][0]
-    #             else:
-    #                 video = info
-    #
-    #             # Store the video ID or webpage URL for refreshing
-    #             self.current_url_info = {
-    #                 'webpage_url': video.get('webpage_url') or video.get('url'),
-    #                 'title': video.get('title', 'Unknown Title'),
-    #             }
-    #             duration = video.get('duration', 0)
-    #             log.success('Found video!')
-    #             log.info(
-    #                 f"Video URL: {video.get('url')}, Video TITLE: {video.get('title', 'Unknown Title')}, Duration: {duration}"
-    #             )
-    #             return video.get('url'), video.get('title', 'Unknown Title'), duration
-    #
-    #         except Exception as e:
-    #             log.error(f'Error fetching YouTube URL: {e}')
-    #             return None, None, None
 
     async def refresh_url(self, stored_info):
         """Refresh the streaming URL for a video"""
@@ -756,77 +705,6 @@ class MusicYT(commands.Cog):
             error_msg = f'Error processing playlist: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond(error_msg)
-
-    # async def play_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
-    #     ctxlog = get_context_logger(ctx)
-    #     ctxlog.info(f'{ctx.author.name} used play_playlist command with playlist: {playlist_name}')
-    #     await ctx.defer()
-    #
-    #     if ctx.author.voice is None:
-    #         await ctx.respond('You need to join a voice channel first.')
-    #         return
-    #
-    #     voice_channel = ctx.author.voice.channel
-    #     playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
-    #
-    #     if not os.path.exists(playlist_path):
-    #         await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
-    #         ctxlog.warning(f'Playlist not found: {playlist_path}')
-    #         return
-    #
-    #     try:
-    #         with open(playlist_path, 'r', encoding='utf-8') as file:
-    #             songs = [line.strip() for line in file if line.strip()]
-    #
-    #         if not songs:
-    #             await ctx.respond(f"Playlist '{playlist_name}' is empty.")
-    #             return
-    #
-    #         # Add all songs to temp queue
-    #         random.shuffle(songs)
-    #         self.queue.add_to_temp_queue(songs)
-    #         total_songs = len(songs)
-    #
-    #         # Connect to voice channel if needed
-    #         if ctx.voice_client is None:
-    #             await voice_channel.connect()
-    #             await asyncio.sleep(0.5)
-    #
-    #         # Process first song immediately if nothing is playing
-    #         if not ctx.voice_client.is_playing():
-    #             first_song = self.queue.get_next_temp_songs(1)[0]
-    #             url, title, duration = await self.fetch_youtube_url(first_song)
-    #
-    #             if url:
-    #                 self.queue.add_song((url, title, duration))
-    #                 ctx.voice_client.play(
-    #                     discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
-    #                     after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
-    #                 )
-    #                 ctxlog.success(f'Started playing: {title}')
-    #
-    #         # Process initial batch of songs
-    #         initial_songs = self.queue.get_next_temp_songs(self.INITIAL_SONGS_TO_LOAD)
-    #         processed_count = 0
-    #         await ctx.respond(f'Loading playlist: "{playlist_name}" with {total_songs} songs.')
-    #
-    #         for song in initial_songs:
-    #             url, title, duration = await self.fetch_youtube_url(song)
-    #             if url:
-    #                 self.queue.add_song((url, title, duration))
-    #                 processed_count += 1
-    #                 ctxlog.info(f'Added to queue: {title}')
-    #
-    #         remaining = self.queue.get_temp_queue_size()
-    #         await ctx.send(
-    #             f"Added {processed_count} songs to queue. {remaining} songs remaining in playlist '{playlist_name}'. "
-    #             f'More songs will be added automatically as the playlist progresses.'
-    #         )
-    #
-    #     except Exception as e:
-    #         error_msg = f'Error processing playlist: {str(e)}'
-    #         ctxlog.error(error_msg)
-    #         await ctx.respond(error_msg)
 
     @commands.slash_command(name='create_playlist', description='Create a new empty playlist')
     async def create_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
