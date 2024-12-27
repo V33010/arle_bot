@@ -551,7 +551,7 @@ class MusicYT(commands.Cog):
         queue_message = f'Next {n} songs in queue:\n'
         for i in range(len(next_song_titles)):
             queue_message += (
-                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]})'
+                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]}'
             )
         total_songs = len(self.queue.queue[self.queue.current_index :])
         queue_message += f'\n\nTotal songs in queue: {total_songs}'
