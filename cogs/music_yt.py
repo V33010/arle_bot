@@ -1,4 +1,3 @@
-# TODO: implement clearing queue after bot disconnects
 # TODO: create play_yt_playlist command for handling youtube playlists
 import asyncio
 import os
@@ -248,10 +247,14 @@ class MusicYT(commands.Cog):
                     # Process any remaining songs in temp queue before disconnecting
                     if self.queue.get_temp_queue_size() > 0:
                         await self.process_temp_queue(ctx)
+
+                    # Clear queues before disconnecting
+                    self.queue.queue = []
+                    self.queue.temp_queue = []
+                    self.queue.current_index = -1
+
+                    # Disconnect the bot once all songs in the queue have been completed
                     await ctx.voice_client.disconnect()
-                    # self.queue.queue = []
-                    # self.queue.temp_queue = []
-                    # self.queue.current_index = -1
 
         except Exception as e:
             ctxlog.error(f'Error in play_next_song: {e}')
@@ -481,6 +484,7 @@ class MusicYT(commands.Cog):
         ctxlog.info(f'{ctx.author.name} used command stop')
         self.queue.queue = []
         self.queue.current_index = -1
+        self.queue.temp_queue = []
         ctxlog.debug('Cleared the queue and set self.current_index = -1')
 
         if ctx.voice_client is None:
