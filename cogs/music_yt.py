@@ -889,6 +889,57 @@ class MusicYT(commands.Cog):
 
         ctxlog.success('Displayed temp queue songs')
 
+    @commands.slash_command(name='skip_multiple', description='Skip multiple songs in the queue.')
+    async def skip_multiple(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command 'skip_multiple' with number: {number}")
+
+        # Check if music is playing
+        if ctx.voice_client is None or not ctx.voice_client.is_playing():
+            await ctx.respond('No music playing to be skipped.')
+            ctxlog.warning('Used skip_multiple command without music playback.')
+            return
+
+        # Try to convert input to integer
+        try:
+            skip_count = int(number)
+            if skip_count <= 0:
+                await ctx.respond('Please provide a positive number.')
+                ctxlog.warning(f'Invalid skip count provided: {skip_count}')
+                return
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Calculate remaining songs in queue
+        remaining_songs = len(self.queue.queue) - (self.queue.current_index + 1)
+
+        # Check if skip count is valid
+        if skip_count > remaining_songs:
+            await ctx.respond(
+                f'Cannot skip {skip_count} songs. Only {remaining_songs} songs remaining in queue.'
+            )
+            ctxlog.warning(
+                f'Attempted to skip more songs than available: {skip_count} > {remaining_songs}'
+            )
+            return
+
+        # Store current song for message
+        _ = self.get_current_song()[1]
+
+        # Adjust the current_index before stopping
+        self.queue.current_index += (
+            skip_count - 1
+        )  # -1 because stop() will trigger play_next_song which increments by 1
+
+        # Stop current song which will trigger play_next_song
+        ctxlog.info('Stopping current song...')
+        ctx.voice_client.stop()
+
+        await ctx.respond(f'Skipped {skip_count} songs.')
+        ctxlog.success(f'Successfully skipped {skip_count} songs')
+
 
 def setup(bot):
     bot.add_cog(MusicYT(bot))
