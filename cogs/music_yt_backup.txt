@@ -1,0 +1,32 @@
+@commands.slash_command(  # WARN: Not working.
+    name="play_playlist", description="Play all songs in a YouTube playlist."
+)
+async def play_playlist(self, ctx: discord.ApplicationContext, playlist_url: str):
+    ctxlog = get_context_logger(ctx)
+    await ctx.defer()
+    ctxlog.info(f"{ctx.author.name} used command play_playlist")
+
+    with YoutubeDL({**self.ydl_opts, "extract_flat": True}) as ydl:
+        try:
+            info = ydl.extract_info(playlist_url, download=False)
+            ctxlog.debug(f"Found Playlist")
+            entries = info.get("entries", [])
+            ctxlog.debug(f"Playlist has {len(entries)} videos.")
+            for entry in entries:
+                url = entry.get("url")
+                title = entry.get("title", "Unknown Title")
+                self.queue.add_song((url, title))
+
+            await ctx.respond(
+                f"Added {len(entries)} songs from the playlist to the queue."
+            )
+
+            if ctx.author.voice and ctx.voice_client is None:
+                _ = await ctx.author.voice.channel.connect()
+
+            if not ctx.voice_client.is_playing():
+                await self.play_next_song(ctx)
+
+        except Exception as e:
+            await ctx.respond("Failed to fetch the playlist.")
+            ctxlog.error(f"Error fetching playlist: {e}")

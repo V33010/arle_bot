@@ -62,10 +62,11 @@ def main():
         'cogs.moderation',
         'cogs.smashorpass',
         'cogs.lyrics',
+        'cogs.music_yt',
     ]
 
-    if arle_config.arle.local_music:
-        extensions.append('cogs.music')
+    # if arle_config.arle.local_music:
+    #     extensions.append("cogs.music")
     for extension in extensions:
         log.debug(f'loaded {extension} extension')
         bot.load_extension(extension)
