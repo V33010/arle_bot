@@ -987,6 +987,35 @@ class MusicYT(commands.Cog):
         await ctx.respond(f'Jumped from "{current_song}" to "{target_song}"')
         ctxlog.success(f'Successfully jumped to index {jump_index}')
 
+    @commands.slash_command(
+        name='play_next',
+        description='Add a song to play immediately after the current song.',
+    )
+    async def play_next(self, ctx: discord.ApplicationContext, query: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used play_next command with query: {query}')
+        await ctx.defer()
+
+        # Check if there's an active queue
+        if self.queue.current_index == -1:
+            await ctx.respond('No active queue. Use /play_music instead.')
+            ctxlog.warning('Used play_next without active queue')
+            return
+
+        # Fetch the song info
+        url, title, duration = await self.fetch_youtube_url(query)
+        if not url:
+            await ctx.respond('Failed to fetch the song from YouTube.')
+            ctxlog.warning(f'Failed to fetch song info for query: {query}')
+            return
+
+        # Insert the song right after the current song
+        insert_position = self.queue.current_index + 1
+        self.queue.queue.insert(insert_position, (url, title, duration))
+
+        await ctx.respond(f'Added "{title}" ({format_duration(duration)}) to play next')
+        ctxlog.success(f'Successfully inserted song at position {insert_position}: {title}')
+
 
 def setup(bot):
     bot.add_cog(MusicYT(bot))
