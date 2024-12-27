@@ -993,7 +993,7 @@ class MusicYT(commands.Cog):
         current_song = self.get_current_song()[1]
 
         # Set the index to one less than target because stop() will trigger play_next_song which increments by 1
-        self.queue.current_index = jump_index - 1
+        self.queue.current_index = jump_index  # - 1
 
         # Stop current song which will trigger play_next_song
         ctxlog.info('Stopping current song...')
@@ -1030,6 +1030,81 @@ class MusicYT(commands.Cog):
 
         await ctx.respond(f'Added "{title}" ({format_duration(duration)}) to play next')
         ctxlog.success(f'Successfully inserted song at position {insert_position}: {title}')
+
+    @commands.slash_command(
+        name='load_songs',
+        description='Load a specified number of songs from the temporary queue (max 10).',
+    )
+    async def load_songs(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used load_songs command with number: {number}')
+        await ctx.defer()
+
+        # Validate input number
+        try:
+            count = int(number)
+            if count <= 0:
+                await ctx.respond('Please provide a positive number.')
+                ctxlog.warning(f'Invalid count provided: {count}')
+                return
+            if count > 10:
+                await ctx.respond('Maximum number of songs to load is 10.')
+                ctxlog.warning(f'Count exceeded maximum limit: {count}')
+                return
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Check if there are songs in temp queue
+        if self.queue.get_temp_queue_size() == 0:
+            await ctx.respond('No songs in temporary queue to load.')
+            ctxlog.warning('Temp queue is empty')
+            return
+
+        # Get songs to process
+        available_songs = min(count, self.queue.get_temp_queue_size())
+        songs_to_process = self.queue.get_next_temp_songs(available_songs)
+
+        try:
+            # Process songs concurrently
+            fetch_tasks = [self.fetch_youtube_url(song) for song in songs_to_process]
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+            processed_count = 0
+            failed_count = 0
+
+            for result in results:
+                if isinstance(result, Exception):
+                    failed_count += 1
+                    ctxlog.warning(f'Failed to process song: {result}')
+                    continue
+
+                url, title, duration = result
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+                else:
+                    failed_count += 1
+
+            # Prepare response message
+            if available_songs < count:
+                message = f'Loaded all {available_songs} available songs from temp queue ({processed_count} successful, {failed_count} failed).'
+            else:
+                message = f'Loaded {processed_count} songs from temp queue ({failed_count} failed).'
+
+            remaining = self.queue.get_temp_queue_size()
+            if remaining > 0:
+                message += f'\n{remaining} songs remaining in temp queue.'
+
+            await ctx.respond(message)
+            ctxlog.success(f'Successfully processed {processed_count} songs')
+
+        except Exception as e:
+            error_msg = f'Error processing songs: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to load songs. Please try again.')
 
 
 def setup(bot):
