@@ -3,14 +3,26 @@ import asyncio
 import functools
 import os
 import random
+import re
+import tomllib
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 import discord
+import requests
 from discord.ext import commands
 from yt_dlp import YoutubeDL
 
 from utils.logger import get_context_logger, log
+from validators.config import ConfigValidator
+
+with open(os.path.join('config.toml'), 'rb') as f:
+    data = tomllib.load(f)
+arle_config: ConfigValidator = ConfigValidator.model_validate(data)
+
+youtube_api_key = arle_config.secrets.youtube_api_key
+
+# log.info(f"youtube_api_key: {youtube_api_key}")
 
 
 def format_duration(duration: int):
@@ -100,6 +112,7 @@ class MusicYT(commands.Cog):
             'nocheckcertificate': True,
         }
         self.current_url_info = None
+        self.youtube_api_key = youtube_api_key
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
         self.INITIAL_SONGS_TO_LOAD = 4
         self.SONGS_TO_ADD_ON_NEXT = 2
@@ -296,6 +309,9 @@ class MusicYT(commands.Cog):
         await ctx.defer()
 
         if ctx.author.voice is None:
+            ctxlog.warning(
+                f'{ctx.author.name} attempted to call play_music without joining a voice channel.'
+            )
             await ctx.respond('You need to join a voice channel first.')
             return
 
@@ -392,6 +408,7 @@ class MusicYT(commands.Cog):
     @commands.slash_command(name='display_queue_long', description='Display the entire queue.')
     async def display_queue_long(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
+        await ctx.defer()
         ctxlog.info(f'{ctx.author.name} used display_queue_long command.')
         total_length = len(self.queue.queue)
         if total_length == 0:
@@ -424,6 +441,7 @@ class MusicYT(commands.Cog):
                 + queue_message
             )
             if len(queue_message) > 2000:
+                ctx.respond('Showing complete queue...')
                 chunks = [queue_message[i : i + 2000] for i in range(0, len(queue_message), 2000)]
                 for chunk in chunks:
                     await ctx.send(chunk)
@@ -551,7 +569,7 @@ class MusicYT(commands.Cog):
         queue_message = f'Next {n} songs in queue:\n'
         for i in range(len(next_song_titles)):
             queue_message += (
-                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]})'
+                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]}'
             )
         total_songs = len(self.queue.queue[self.queue.current_index :])
         queue_message += f'\n\nTotal songs in queue: {total_songs}'
@@ -577,7 +595,22 @@ class MusicYT(commands.Cog):
         self.queue.temp_queue = temp_songs
         ctxlog.success('Shuffled the songs and updated the queue.')
 
+        # Get all remaining songs if less than 5, otherwise get next 5
+        next_songs = self.queue.queue[self.queue.current_index + 1 :]
+        if len(next_songs) > 5:
+            next_songs = next_songs[:5]
+            ctxlog.info('Showing next 5 songs after shuffle')
+        else:
+            ctxlog.info(f'Showing all {len(next_songs)} remaining songs after shuffle')
+
+        # Create message for next songs
+        next_songs_message = 'Next songs after shuffle:\n'
+        for i, song in enumerate(next_songs, 1):
+            _, title, duration = song
+            next_songs_message += f'{i}. ({format_duration(duration)}) | {title}\n'
+
         await ctx.respond('Shuffled the remaining songs in the queue.')
+        await ctx.followup.send(next_songs_message)
 
     @commands.slash_command(name='loop_once', description='Loop the current song')
     async def loop_once(self, ctx: discord.ApplicationContext):
@@ -638,6 +671,7 @@ class MusicYT(commands.Cog):
         await ctx.defer()
 
         if ctx.author.voice is None:
+            ctxlog.warning('Attempted to use play_playlist command without joining voice channel.')
             await ctx.respond('You need to join a voice channel first.')
             return
 
@@ -678,6 +712,7 @@ class MusicYT(commands.Cog):
                         discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
                         after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                     )
+                    await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
                     ctxlog.success(f'Started playing: {title}')
 
             # Process initial batch of songs concurrently
@@ -888,6 +923,482 @@ class MusicYT(commands.Cog):
             await ctx.respond(formatted_message)
 
         ctxlog.success('Displayed temp queue songs')
+
+    @commands.slash_command(name='skip_multiple', description='Skip multiple songs in the queue.')
+    async def skip_multiple(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command 'skip_multiple' with number: {number}")
+
+        # Check if music is playing
+        if ctx.voice_client is None or not ctx.voice_client.is_playing():
+            await ctx.respond('No music playing to be skipped.')
+            ctxlog.warning('Used skip_multiple command without music playback.')
+            return
+
+        # Try to convert input to integer
+        try:
+            skip_count = int(number)
+            if skip_count <= 0:
+                await ctx.respond('Please provide a positive number.')
+                ctxlog.warning(f'Invalid skip count provided: {skip_count}')
+                return
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Calculate remaining songs in queue
+        remaining_songs = len(self.queue.queue) - (self.queue.current_index + 1)
+
+        # Check if skip count is valid
+        if skip_count > remaining_songs:
+            await ctx.respond(
+                f'Cannot skip {skip_count} songs. Only {remaining_songs} songs remaining in queue.'
+            )
+            ctxlog.warning(
+                f'Attempted to skip more songs than available: {skip_count} > {remaining_songs}'
+            )
+            return
+
+        # Store current song for message
+        _ = self.get_current_song()[1]
+
+        # Adjust the current_index before stopping
+        self.queue.current_index += (
+            skip_count - 1
+        )  # -1 because stop() will trigger play_next_song which increments by 1
+
+        # Stop current song which will trigger play_next_song
+        ctxlog.info('Stopping current song...')
+        ctx.voice_client.stop()
+
+        await ctx.respond(f'Skipped {skip_count} songs.')
+        ctxlog.success(f'Successfully skipped {skip_count} songs')
+
+    @commands.slash_command(
+        name='jump', description='Jump to a specific song in the queue by its number.'
+    )
+    async def jump(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f"{ctx.author.name} used command 'jump' with number: {number}")
+
+        # Check if music is playing
+        if ctx.voice_client is None or not ctx.voice_client.is_playing():
+            await ctx.respond('No music playing.')
+            ctxlog.warning('Used jump command without music playback.')
+            return
+
+        # Try to convert input to integer
+        try:
+            jump_index = int(number)
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Check if the index is within queue bounds
+        if jump_index < 2 or jump_index > len(self.queue.queue):
+            await ctx.respond(
+                f'Invalid song number. Please use a number between 2 and {len(self.queue.queue)}'
+            )
+            ctxlog.warning(f'Jump index out of range: {jump_index}')
+            return
+
+        # Store target song name for message
+        target_song = self.queue.queue[jump_index - 1][1]
+
+        # Store current song for message
+        current_song = self.get_current_song()[1]
+
+        # Set the index to one less than target because stop() will trigger play_next_song which increments by 1
+        self.queue.current_index = jump_index - 2
+
+        # Stop current song which will trigger play_next_song
+        ctxlog.info('Stopping current song...')
+        ctx.voice_client.stop()
+
+        await ctx.respond(f'Jumped from "{current_song}" to "{target_song}"')
+        ctxlog.success(f'Successfully jumped to index {jump_index}')
+
+    @commands.slash_command(
+        name='play_next',
+        description='Add a song to play immediately after the current song.',
+    )
+    async def play_next(self, ctx: discord.ApplicationContext, query: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used play_next command with query: {query}')
+        await ctx.defer()
+
+        # Check if there's an active queue
+        if self.queue.current_index == -1:
+            await ctx.respond('No active queue. Use /play_music instead.')
+            ctxlog.warning('Used play_next without active queue')
+            return
+
+        # Fetch the song info
+        url, title, duration = await self.fetch_youtube_url(query)
+        if not url:
+            await ctx.respond('Failed to fetch the song from YouTube.')
+            ctxlog.warning(f'Failed to fetch song info for query: {query}')
+            return
+
+        # Insert the song right after the current song
+        insert_position = self.queue.current_index + 1
+        self.queue.queue.insert(insert_position, (url, title, duration))
+
+        await ctx.respond(f'Added "{title}" ({format_duration(duration)}) to play next')
+        ctxlog.success(f'Successfully inserted song at position {insert_position}: {title}')
+
+    @commands.slash_command(
+        name='load_songs',
+        description='Load a specified number of songs from the temporary queue (max 10).',
+    )
+    async def load_songs(self, ctx: discord.ApplicationContext, number: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used load_songs command with number: {number}')
+        await ctx.defer()
+
+        # Validate input number
+        try:
+            count = int(number)
+            if count <= 0:
+                await ctx.respond('Please provide a positive number.')
+                ctxlog.warning(f'Invalid count provided: {count}')
+                return
+            if count > 10:
+                await ctx.respond('Maximum number of songs to load is 10.')
+                ctxlog.warning(f'Count exceeded maximum limit: {count}')
+                return
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid input provided: {number}')
+            return
+
+        # Check if there are songs in temp queue
+        if self.queue.get_temp_queue_size() == 0:
+            await ctx.respond('No songs in temporary queue to load.')
+            ctxlog.warning('Temp queue is empty')
+            return
+
+        # Get songs to process
+        available_songs = min(count, self.queue.get_temp_queue_size())
+        songs_to_process = self.queue.get_next_temp_songs(available_songs)
+
+        try:
+            # Process songs concurrently
+            fetch_tasks = [self.fetch_youtube_url(song) for song in songs_to_process]
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+            processed_count = 0
+            failed_count = 0
+
+            for result in results:
+                if isinstance(result, Exception):
+                    failed_count += 1
+                    ctxlog.warning(f'Failed to process song: {result}')
+                    continue
+
+                url, title, duration = result
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+                else:
+                    failed_count += 1
+
+            # Prepare response message
+            if available_songs < count:
+                message = f'Loaded all {available_songs} available songs from temp queue ({processed_count} successful, {failed_count} failed).'
+            else:
+                message = f'Loaded {processed_count} songs from temp queue ({failed_count} failed).'
+
+            remaining = self.queue.get_temp_queue_size()
+            if remaining > 0:
+                message += f'\n{remaining} songs remaining in temp queue.'
+
+            await ctx.respond(message)
+            ctxlog.success(f'Successfully processed {processed_count} songs')
+
+        except Exception as e:
+            error_msg = f'Error processing songs: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to load songs. Please try again.')
+
+    @commands.slash_command(name='suggest', description='Suggests trending or recommended songs.')
+    async def suggest(self, ctx):
+        ctxlogger = get_context_logger(ctx)
+        ctxlogger.info(f"{ctx.author.name} used command 'suggest'")
+        current_song_title = self.get_current_song()[1]
+        ctxlogger.info(f'Current song: {current_song_title}')
+
+        if '(' in current_song_title:
+            current_song_title = current_song_title.split('(')[0]
+
+        if '-' in current_song_title:
+            current_song_title = current_song_title.split('-')[0]
+
+        await ctx.defer()  # Respond with a delay
+
+        # Fetch related videos using YouTube API
+        url = 'https://www.googleapis.com/youtube/v3/search'
+        params = {
+            'part': 'snippet',
+            'q': current_song_title,  # Query the current song or a default query
+            'type': 'video',
+            'key': self.youtube_api_key,
+            'maxResults': 5,
+        }
+
+        ctxlogger.debug(f'Sending GET request to url: {url}')
+
+        response = requests.get(url, params=params)
+        if response.status_code != 200:
+            ctxlogger.error('Request failed.')
+            await ctx.respond('Failed to fetch suggestions. Please try again later.')
+            return
+
+        ctxlogger.success('Request returned code 200')
+        data = response.json()
+        suggestions = []
+        for item in data.get('items', []):
+            title = item['snippet']['title']
+            video_id = item['id']['videoId']
+            url = f'https://www.youtube.com/watch?v={video_id}'
+            suggestions.append(f'[{title}]({url})')
+
+        if not suggestions:
+            ctxlogger.warning(f'No suggestions found for song: {current_song_title}')
+            await ctx.respond('No suggestions found!')
+            return
+
+        # Create a rich embed to display suggestions
+        await ctx.respond(f'Showing suggestions for: {current_song_title}')
+        embed = discord.Embed(
+            title='🎵 Suggested Songs',
+            description='\n'.join(suggestions),
+            color=discord.Color.blue(),
+        )
+
+        await ctx.send(embed=embed)
+        ctxlogger.success('Send suggestions embed successfully.')
+
+    @commands.slash_command(
+        name='queueinfo',
+        description='Display detailed analytics about the current queue.',
+    )
+    async def queueinfo(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used command queueinfo')
+
+        if len(self.queue.queue) == 0:
+            await ctx.respond('The queue is currently empty.')
+            ctxlog.warning('Queue is empty')
+            return
+
+        try:
+            # Calculate queue statistics
+            total_songs = len(self.queue.queue)
+            remaining_songs = len(self.queue.queue[self.queue.current_index :])
+            completed_songs = total_songs - remaining_songs
+
+            # Duration calculations
+            total_duration = sum(song[2] for song in self.queue.queue)
+            remaining_duration = sum(
+                song[2] for song in self.queue.queue[self.queue.current_index :]
+            )
+            completed_duration = total_duration - remaining_duration
+            avg_duration = total_duration // total_songs
+
+            # Format the embed message
+            embed = discord.Embed(title='📊 Queue Statistics', color=discord.Color.blue())
+
+            # Songs information
+            embed.add_field(
+                name='Songs',
+                value=f'Total: {total_songs}\n'
+                f'Remaining: {remaining_songs}\n'
+                f'Completed: {completed_songs}',
+                inline=True,
+            )
+
+            # Duration information
+            embed.add_field(
+                name='Duration',
+                value=f'Total: {format_duration(total_duration)}\n'
+                f'Remaining: {format_duration(remaining_duration)}\n'
+                f'Completed: {format_duration(completed_duration)}',
+                inline=True,
+            )
+
+            # Additional statistics
+            embed.add_field(
+                name='Average Duration',
+                value=f'{format_duration(avg_duration)} per song',
+                inline=False,
+            )
+
+            if self.loop_type:
+                embed.add_field(name='Loop Status', value=f'🔁 Loop {self.loop_type}', inline=False)
+
+            # Current song information
+            current_song = self.get_current_song()
+            if current_song:
+                embed.add_field(
+                    name='Currently Playing',
+                    value=f'🎵 {current_song[1]} ({format_duration(current_song[2])})',
+                    inline=False,
+                )
+
+                # Calculate progress in queue
+                progress_percent = (completed_songs / total_songs) * 100
+                embed.add_field(
+                    name='Queue Progress',
+                    value=f'Progress: {progress_percent:.1f}% complete',
+                    inline=False,
+                )
+
+            await ctx.respond(embed=embed)
+            ctxlog.success('Successfully displayed queue information')
+
+        except Exception as e:
+            error_msg = f'Error getting queue information: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to get queue information. Please try again.')
+
+    @commands.slash_command(
+        name='remove',
+        description='Remove a specific song from the queue by its position number.',
+    )
+    async def remove(self, ctx: discord.ApplicationContext, position: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used remove command with position: {position}')
+
+        # Check if queue is empty
+        if len(self.queue.queue) == 0:
+            await ctx.respond('The queue is currently empty.')
+            ctxlog.warning('Attempted to remove from empty queue')
+            return
+
+        # Validate input is a number
+        try:
+            pos = int(position)
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid position provided: {position}')
+            return
+
+        # Check if number is in valid range
+        pos = pos - 1  # User will provide position based on "display_queue_long"
+        if pos < 0 or pos >= len(self.queue.queue):
+            await ctx.respond(f'Please provide a number between 0 and {len(self.queue.queue) - 1}.')
+            ctxlog.warning(f'Position out of range: {pos}')
+            return
+
+        # Check if trying to remove currently playing song
+        if pos == self.queue.current_index:
+            await ctx.respond('Cannot remove the currently playing song. Use /skip instead.')
+            ctxlog.warning('Attempted to remove currently playing song')
+            return
+
+        try:
+            # Get song details before removing
+            removed_song = self.queue.queue[pos]
+            song_title = removed_song[1]
+            song_duration = removed_song[2]
+
+            # Remove the song
+            self.queue.queue.pop(pos)
+
+            # Adjust current_index if we removed a song before it
+            if pos < self.queue.current_index:
+                self.queue.current_index -= 1
+                ctxlog.info(f'Adjusted current_index to {self.queue.current_index}')
+
+            await ctx.respond(
+                f'Removed song at position {pos+1}: {song_title} ({format_duration(song_duration)})'
+            )
+            ctxlog.success(f'Successfully removed song at position {pos}')
+
+        except Exception as e:
+            error_msg = f'Error removing song: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to remove song. Please try again.')
+
+    @commands.slash_command(
+        name='seek',
+        description='Seek to a specific timestamp in the current song (format: mm:ss)',
+    )
+    async def seek(self, ctx: discord.ApplicationContext, timestamp: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used seek command with timestamp: {timestamp}')
+
+        # Check if music is playing
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.respond('No song is currently playing.')
+            ctxlog.warning('Used seek command without active playback')
+            return
+
+        # Validate timestamp format (mm:ss)
+        if not re.match(r'^\d{1,2}:\d{2}$', timestamp):
+            await ctx.respond('Invalid timestamp format. Please use mm:ss (e.g., 2:30)')
+            ctxlog.warning(f'Invalid timestamp format: {timestamp}')
+            return
+
+        try:
+            # Convert timestamp to seconds
+            minutes, seconds = map(int, timestamp.split(':'))
+            seek_position = minutes * 60 + seconds
+
+            # Get current song duration
+            current_song = self.get_current_song()
+            if not current_song:
+                await ctx.respond('No song is currently playing.')
+                return
+
+            song_duration = current_song[2]
+
+            # Check if seek position is valid
+            if seek_position >= song_duration:
+                await ctx.respond(
+                    f'Timestamp exceeds song duration ({format_duration(song_duration)})'
+                )
+                ctxlog.warning(f'Seek position {seek_position} exceeds duration {song_duration}')
+                return
+
+            # Create new FFMPEG options with seek
+            ffmpeg_options = {
+                'before_options': f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {seek_position}',
+                'options': '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
+            }
+
+            # Get the current URL or refresh it if needed
+            url = current_song[0]
+            if not url:
+                url, _, _ = await self.refresh_url(self.current_url_info)
+                if not url:
+                    await ctx.respond('Failed to seek. Please try again.')
+                    return
+
+            # Stop current playback
+            ctx.voice_client.stop()
+
+            # Start playback from new position
+            ctx.voice_client.play(
+                discord.FFmpegPCMAudio(url, **ffmpeg_options),
+                after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+            )
+
+            await ctx.respond(f'Seeked to {timestamp}')
+            self.queue.current_index -= 1
+            ctxlog.success(f'Successfully seeked to position {seek_position}')
+
+        except ValueError as e:
+            await ctx.respond('Invalid timestamp values. Please use valid numbers (e.g., 2:30)')
+            ctxlog.error(f'ValueError in seek command: {e}')
+        except Exception as e:
+            error_msg = f'Error during seek: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to seek. Please try again.')
 
 
 def setup(bot):
