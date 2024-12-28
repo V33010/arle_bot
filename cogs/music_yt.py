@@ -308,6 +308,9 @@ class MusicYT(commands.Cog):
         await ctx.defer()
 
         if ctx.author.voice is None:
+            ctxlog.warning(
+                f'{ctx.author.name} attempted to call play_music without joining a voice channel.'
+            )
             await ctx.respond('You need to join a voice channel first.')
             return
 
@@ -667,6 +670,7 @@ class MusicYT(commands.Cog):
         await ctx.defer()
 
         if ctx.author.voice is None:
+            ctxlog.warning('Attempted to use play_playlist command without joining voice channel.')
             await ctx.respond('You need to join a voice channel first.')
             return
 
@@ -1259,6 +1263,65 @@ class MusicYT(commands.Cog):
             error_msg = f'Error getting queue information: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to get queue information. Please try again.')
+
+    @commands.slash_command(
+        name='remove',
+        description='Remove a specific song from the queue by its position number.',
+    )
+    async def remove(self, ctx: discord.ApplicationContext, position: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used remove command with position: {position}')
+
+        # Check if queue is empty
+        if len(self.queue.queue) == 0:
+            await ctx.respond('The queue is currently empty.')
+            ctxlog.warning('Attempted to remove from empty queue')
+            return
+
+        # Validate input is a number
+        try:
+            pos = int(position)
+        except ValueError:
+            await ctx.respond('Please provide a valid number.')
+            ctxlog.warning(f'Invalid position provided: {position}')
+            return
+
+        # Check if number is in valid range
+        pos = pos - 1  # User will provide position based on "display_queue_long"
+        if pos < 0 or pos >= len(self.queue.queue):
+            await ctx.respond(f'Please provide a number between 0 and {len(self.queue.queue) - 1}.')
+            ctxlog.warning(f'Position out of range: {pos}')
+            return
+
+        # Check if trying to remove currently playing song
+        if pos == self.queue.current_index:
+            await ctx.respond('Cannot remove the currently playing song. Use /skip instead.')
+            ctxlog.warning('Attempted to remove currently playing song')
+            return
+
+        try:
+            # Get song details before removing
+            removed_song = self.queue.queue[pos]
+            song_title = removed_song[1]
+            song_duration = removed_song[2]
+
+            # Remove the song
+            self.queue.queue.pop(pos)
+
+            # Adjust current_index if we removed a song before it
+            if pos < self.queue.current_index:
+                self.queue.current_index -= 1
+                ctxlog.info(f'Adjusted current_index to {self.queue.current_index}')
+
+            await ctx.respond(
+                f'Removed song at position {pos+1}: {song_title} ({format_duration(song_duration)})'
+            )
+            ctxlog.success(f'Successfully removed song at position {pos}')
+
+        except Exception as e:
+            error_msg = f'Error removing song: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to remove song. Please try again.')
 
 
 def setup(bot):
