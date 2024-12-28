@@ -20,6 +20,7 @@ class arleSecrets(CustomBaseModel):
     discord_token: str
     genius_token: str | None
     logfire_token: str | None
+    youtube_api_key: str | None
 
 
 class devDb(CustomBaseModel):
