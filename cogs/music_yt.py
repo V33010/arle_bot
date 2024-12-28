@@ -3,6 +3,7 @@ import asyncio
 import functools
 import os
 import random
+import re
 import tomllib
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -1322,6 +1323,82 @@ class MusicYT(commands.Cog):
             error_msg = f'Error removing song: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to remove song. Please try again.')
+
+    @commands.slash_command(
+        name='seek',
+        description='Seek to a specific timestamp in the current song (format: mm:ss)',
+    )
+    async def seek(self, ctx: discord.ApplicationContext, timestamp: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used seek command with timestamp: {timestamp}')
+
+        # Check if music is playing
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.respond('No song is currently playing.')
+            ctxlog.warning('Used seek command without active playback')
+            return
+
+        # Validate timestamp format (mm:ss)
+        if not re.match(r'^\d{1,2}:\d{2}$', timestamp):
+            await ctx.respond('Invalid timestamp format. Please use mm:ss (e.g., 2:30)')
+            ctxlog.warning(f'Invalid timestamp format: {timestamp}')
+            return
+
+        try:
+            # Convert timestamp to seconds
+            minutes, seconds = map(int, timestamp.split(':'))
+            seek_position = minutes * 60 + seconds
+
+            # Get current song duration
+            current_song = self.get_current_song()
+            if not current_song:
+                await ctx.respond('No song is currently playing.')
+                return
+
+            song_duration = current_song[2]
+
+            # Check if seek position is valid
+            if seek_position >= song_duration:
+                await ctx.respond(
+                    f'Timestamp exceeds song duration ({format_duration(song_duration)})'
+                )
+                ctxlog.warning(f'Seek position {seek_position} exceeds duration {song_duration}')
+                return
+
+            # Create new FFMPEG options with seek
+            ffmpeg_options = {
+                'before_options': f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -ss {seek_position}',
+                'options': '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
+            }
+
+            # Get the current URL or refresh it if needed
+            url = current_song[0]
+            if not url:
+                url, _, _ = await self.refresh_url(self.current_url_info)
+                if not url:
+                    await ctx.respond('Failed to seek. Please try again.')
+                    return
+
+            # Stop current playback
+            ctx.voice_client.stop()
+
+            # Start playback from new position
+            ctx.voice_client.play(
+                discord.FFmpegPCMAudio(url, **ffmpeg_options),
+                after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+            )
+
+            await ctx.respond(f'Seeked to {timestamp}')
+            self.queue.current_index -= 1
+            ctxlog.success(f'Successfully seeked to position {seek_position}')
+
+        except ValueError as e:
+            await ctx.respond('Invalid timestamp values. Please use valid numbers (e.g., 2:30)')
+            ctxlog.error(f'ValueError in seek command: {e}')
+        except Exception as e:
+            error_msg = f'Error during seek: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to seek. Please try again.')
 
 
 def setup(bot):
