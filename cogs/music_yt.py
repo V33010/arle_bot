@@ -1202,7 +1202,7 @@ class MusicYT(commands.Cog):
                 song[2] for song in self.queue.queue[self.queue.current_index :]
             )
             completed_duration = total_duration - remaining_duration
-            avg_duration = total_duration / total_songs
+            avg_duration = total_duration // total_songs
 
             # Format the embed message
             embed = discord.Embed(title='📊 Queue Statistics', color=discord.Color.blue())
