@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import discord
 import requests
 from discord.ext import commands
+from pytube import Playlist
 from yt_dlp import YoutubeDL
 
 from utils.logger import get_context_logger, log
@@ -1399,6 +1400,85 @@ class MusicYT(commands.Cog):
             error_msg = f'Error during seek: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to seek. Please try again.')
+
+    @commands.slash_command(
+        name='play_playlist_yt',
+        description='Play all songs from a YouTube playlist URL',
+    )
+    async def play_playlist_yt(self, ctx: discord.ApplicationContext, playlist_url: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used play_playlist_yt command with URL: {playlist_url}')
+        await ctx.defer()
+
+        if ctx.author.voice is None:
+            ctxlog.warning(
+                'Attempted to use play_playlist_yt command without joining voice channel.'
+            )
+            await ctx.respond('You need to join a voice channel first.')
+            return
+
+        voice_channel = ctx.author.voice.channel
+
+        try:
+            # Get all video URLs from the playlist
+            ctxlog.info('Fetching playlist videos...')
+            playlist = Playlist(playlist_url)
+            video_links = [video_url for video_url in playlist.video_urls]
+
+            if not video_links:
+                await ctx.respond('No videos found in the playlist or invalid playlist URL.')
+                ctxlog.warning('No videos found in playlist')
+                return
+
+            # Add all videos to temp queue
+            random.shuffle(video_links)
+            self.queue.add_to_temp_queue(video_links)
+            total_songs = len(video_links)
+
+            # Connect to voice channel if needed
+            if ctx.voice_client is None:
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)
+
+            # Process first song immediately if nothing is playing
+            if not ctx.voice_client.is_playing():
+                first_song = self.queue.get_next_temp_songs(1)[0]
+                url, title, duration = await self.fetch_youtube_url(first_song)
+
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    ctx.voice_client.play(
+                        discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                        after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                    )
+                    await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                    ctxlog.success(f'Started playing: {title}')
+
+            # Process initial batch of songs concurrently
+            initial_songs = self.queue.get_next_temp_songs(self.INITIAL_SONGS_TO_LOAD)
+            await ctx.respond(f'Loading YouTube playlist with {total_songs} songs.')
+
+            # Fetch initial songs concurrently
+            fetch_tasks = [self.fetch_youtube_url(song) for song in initial_songs]
+            results = await asyncio.gather(*fetch_tasks)
+
+            processed_count = 0
+            for url, title, duration in results:
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+
+            remaining = self.queue.get_temp_queue_size()
+            await ctx.send(
+                f'Added {processed_count} songs to queue. {remaining} songs remaining in playlist. '
+                'More songs will be added automatically as the playlist progresses.'
+            )
+
+        except Exception as e:
+            error_msg = f'Error processing YouTube playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond(error_msg)
 
 
 def setup(bot):
