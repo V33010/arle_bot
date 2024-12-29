@@ -1480,6 +1480,65 @@ class MusicYT(commands.Cog):
             ctxlog.error(error_msg)
             await ctx.respond(error_msg)
 
+    @commands.slash_command(
+        name='save_queue',
+        description='Save all songs from current queue and temp queue to a playlist file',
+    )
+    async def save_queue(self, ctx: discord.ApplicationContext, playlist_name: str):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(
+            f'{ctx.author.name} used save_queue command with playlist name: {playlist_name}'
+        )
+
+        # Clean the playlist name to prevent directory traversal and ensure it's safe
+        playlist_name = ''.join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_'))
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
+        if os.path.exists(playlist_path):
+            error_msg = f'A playlist named "{playlist_name}" already exists. Please choose a different name.'
+            ctxlog.warning(f'Attempted to create duplicate playlist: {playlist_name}')
+            await ctx.respond(error_msg)
+            return
+
+        try:
+            # Create the playlists directory if it doesn't exist
+            os.makedirs(self.playlists_dir, exist_ok=True)
+
+            # Get all songs from main queue
+            main_queue_songs = []
+            for _, title, _ in self.queue.queue:
+                main_queue_songs.append(title)
+
+            # Get all songs from temp queue
+            temp_queue_songs = self.queue.temp_queue
+
+            # Combine all songs
+            all_songs = main_queue_songs + temp_queue_songs
+            total_songs = len(all_songs)
+
+            if total_songs == 0:
+                await ctx.respond('No songs in queue to save.')
+                ctxlog.warning('Attempted to save empty queue')
+                return
+
+            # Write songs to playlist file
+            with open(playlist_path, 'w', encoding='utf-8') as file:
+                for song in all_songs:
+                    file.write(f'{song}\n')
+
+            # Prepare response message
+            message = f'Saved {total_songs} songs to playlist "{playlist_name}":\n'
+            message += f'- {len(main_queue_songs)} songs from main queue\n'
+            message += f'- {len(temp_queue_songs)} songs from temp queue'
+
+            await ctx.respond(message)
+            ctxlog.success(f'Successfully saved {total_songs} songs to playlist: {playlist_name}')
+
+        except Exception as e:
+            error_msg = f'Error saving queue to playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to save queue to playlist. Please try again.')
+
 
 def setup(bot):
     bot.add_cog(MusicYT(bot))
