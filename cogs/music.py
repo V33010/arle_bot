@@ -18,7 +18,7 @@ with open(os.path.join('config.toml'), 'rb') as f:
 arle_config: ConfigValidator = ConfigValidator.model_validate(data)
 
 
-class MusicQueue:
+class MusicQueue_local:
     def __init__(self):
         self.queue = []
         self.current_index = -1
@@ -55,10 +55,10 @@ class MusicQueue:
         return None
 
 
-class Music(commands.Cog):
+class Music_local(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.queue = MusicQueue()
+        self.queue = MusicQueue_local()
         self.loop_type = None  # "once"  # can be "all", "once" or None
         self.now_playing_message = None
         self.song_start_time = None
@@ -76,7 +76,7 @@ class Music(commands.Cog):
         return len(audio) / 1000
 
     @commands.slash_command(
-        name='play_music', description='Play a music file in your voice channel.'
+        name='play_music-local', description='Play a music file in your voice channel.'
     )
     async def play_music(self, ctx: discord.ApplicationContext, filename: str):
         ctxlog = get_context_logger(ctx)
@@ -258,7 +258,7 @@ class Music(commands.Cog):
         empty_blocks = total_blocks - filled_blocks
         return f"[{'█' * filled_blocks}{'░' * empty_blocks}]"
 
-    @commands.slash_command(name='add_to_queue', description='Add a music file to the queue.')
+    @commands.slash_command(name='add_to_queue-local', description='Add a music file to the queue.')
     async def add_to_queue(self, ctx: discord.ApplicationContext, filename: str):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used add_to_queue command.')
@@ -276,7 +276,9 @@ class Music(commands.Cog):
             ctxlog.warning(f'{ctx.author.name} added song to empty queue.')
             await self.play_next_song(ctx)
 
-    @commands.slash_command(name='nowplaying', description='Display the currently playing song.')
+    @commands.slash_command(
+        name='nowplaying-local', description='Display the currently playing song.'
+    )
     async def nowplaying(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used nowplaying command.')
@@ -291,7 +293,9 @@ class Music(commands.Cog):
             await ctx.respond(f'Now playing {song_title}.')
             ctxlog.success(f'Now playing {song_title}.')
 
-    @commands.slash_command(name='display_queue_long', description='Display the entire queue.')
+    @commands.slash_command(
+        name='display_queue_long-local', description='Display the entire queue.'
+    )
     async def display_queue_long(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used display_queue_long command.')
@@ -331,7 +335,7 @@ class Music(commands.Cog):
                 ctxlog.success('Complete queue displayed without chunking.')
 
     @commands.slash_command(
-        name='lyrics_from_file',
+        name='lyrics_from_file-local',
         description='Fetch and display the lyrics of the currently playing song.',
     )
     async def lyrics(self, ctx: discord.ApplicationContext):
@@ -363,7 +367,9 @@ class Music(commands.Cog):
             ctxlog.error(f'Error in fetching lyrics: {e}')
             await ctx.respond(f'Error fetching lyrics: {e}')
 
-    @commands.slash_command(name='past_songs', description='Display the previously played songs.')
+    @commands.slash_command(
+        name='past_songs-local', description='Display the previously played songs.'
+    )
     async def past_songs(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command past_songs.')
@@ -384,7 +390,7 @@ class Music(commands.Cog):
                 await ctx.respond(past_songs)
 
     @commands.slash_command(
-        name='previous', description='Play the previous song.'
+        name='previous-local', description='Play the previous song.'
     )  # BUG: Using this command causes Error in update_now_playing: 404 Not Found (Error code: 10008)
     async def previous(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
@@ -406,7 +412,7 @@ class Music(commands.Cog):
             ctxlog.success('Current song stopped successfully.')
             ctx.respond('Playing previous song.')
 
-    @commands.slash_command(name='skip', description='Skip the current song.')
+    @commands.slash_command(name='skip-local', description='Skip the current song.')
     async def skip(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command skip')
@@ -422,7 +428,7 @@ class Music(commands.Cog):
         ctxlog.success('Skipped current song.')
 
     @commands.slash_command(
-        name='pause', description='Pause the current song.'
+        name='pause-local', description='Pause the current song.'
     )  # BUG: time does not pause when using this command leading to unusual behaviour in create_progress_bar
     async def pause(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
@@ -438,7 +444,7 @@ class Music(commands.Cog):
         await ctx.respond('Paused the song.')
         ctxlog.success('Paused music playback.')
 
-    @commands.slash_command(name='resume', description='Resume playing the paused song.')
+    @commands.slash_command(name='resume-local', description='Resume playing the paused song.')
     async def play(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command resume')
@@ -462,7 +468,7 @@ class Music(commands.Cog):
         else:
             await ctx.respond('No music queued.')
 
-    @commands.slash_command(name='stop', description='Stop the music and clear the queue.')
+    @commands.slash_command(name='stop-local', description='Stop the music and clear the queue.')
     async def stop(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command stop')
@@ -485,7 +491,7 @@ class Music(commands.Cog):
         ctxlog.success('Stopped music playback successfully.')
 
     @commands.slash_command(
-        name='play_playlist',
+        name='play_playlist-local',
         description='Play all audio files in the specified folder.',
     )
     async def play_playlist(self, ctx: discord.ApplicationContext, folder: str):
@@ -532,7 +538,7 @@ class Music(commands.Cog):
             pass
 
     @commands.slash_command(
-        name='display_queue',
+        name='display_queue-local',
         description='Display the next 10 songs and total songs in queue',
     )
     async def display_queue(self, ctx: discord.ApplicationContext):
@@ -569,7 +575,8 @@ class Music(commands.Cog):
         ctxlog.success('Sent display_queue successfully!')
 
     @commands.slash_command(
-        name='shuffle', description='Shuffle all the remaining songs in the queue.'
+        name='shuffle-local',
+        description='Shuffle all the remaining songs in the queue.',
     )
     async def shuffle(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
@@ -586,21 +593,21 @@ class Music(commands.Cog):
 
         await ctx.respond('Shuffled the remaining songs in the queue.')
 
-    @commands.slash_command(name='loop_once', description='Loop the current song')
+    @commands.slash_command(name='loop_once-local', description='Loop the current song')
     async def loop_once(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         self.loop_type = 'once'
         ctxlog.info("Loop type set to 'once'")
         await ctx.respond('Enabled loop for the current song.')
 
-    @commands.slash_command(name='loop_all', description='Loop all songs in queue')
+    @commands.slash_command(name='loop_all-local', description='Loop all songs in queue')
     async def loop_all(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         self.loop_type = 'all'
         ctxlog.info("Loop type set to 'all'")
         await ctx.respond('Enabled loop for the queue.')
 
-    @commands.slash_command(name='loop_off', description='Disable looping')
+    @commands.slash_command(name='loop_off-local', description='Disable looping')
     async def loop_off(self, ctx: discord.ApplicationContext):
         ctxlog = get_context_logger(ctx)
         self.loop_type = None
@@ -609,4 +616,4 @@ class Music(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Music(bot))
+    bot.add_cog(Music_local(bot))
