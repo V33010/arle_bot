@@ -275,6 +275,8 @@ class MusicYT(commands.Cog):
 
                     if success:
                         await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                        voice_channel = ctx.author.voice.channel
+                        await voice_channel.set_status(status=f'{title}')
 
                         # Now process more songs from temp queue if available
                         # This happens after the next song has started playing
@@ -301,9 +303,7 @@ class MusicYT(commands.Cog):
             ctxlog.error(f'Error in play_next_song: {e}')
             ctxlog.error(traceback.format_exc())
 
-    @commands.slash_command(
-        name='play_music', description='Play a music file in your voice channel.'
-    )
+    @commands.slash_command(name='play_music', description='Play music in your voice channel.')
     async def play_music(self, ctx: discord.ApplicationContext, query: str):
         ctxlog = get_context_logger(ctx)
         ctxlog.info('Received play_music request')
@@ -402,6 +402,7 @@ class MusicYT(commands.Cog):
                 song_title = current_song[1]
                 duration = current_song[2]
                 await ctx.respond(f'Now playing {song_title} ({format_duration(duration)}).')
+
                 ctxlog.success(f'Now playing {song_title}.')
             else:
                 ctxlog.error("Could not find current song in function 'nowplaying'")
@@ -714,6 +715,7 @@ class MusicYT(commands.Cog):
                         after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                     )
                     await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                    await voice_channel.set_status(status=f'{title}')
                     ctxlog.success(f'Started playing: {title}')
 
             # Process initial batch of songs concurrently
@@ -1452,6 +1454,7 @@ class MusicYT(commands.Cog):
                         after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                     )
                     await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                    await voice_channel.set_status(status=f'{title}')
                     ctxlog.success(f'Started playing: {title}')
 
             # Process initial batch of songs concurrently
@@ -1538,6 +1541,140 @@ class MusicYT(commands.Cog):
             error_msg = f'Error saving queue to playlist: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to save queue to playlist. Please try again.')
+
+    @commands.slash_command(
+        name='play_liked_songs', description='Play your personal liked songs playlist'
+    )
+    async def play_liked_songs(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used play_liked_songs command')
+
+        await ctx.defer()
+
+        # Check if user is in a voice channel
+        if ctx.author.voice is None:
+            ctxlog.warning(
+                'Attempted to use play_liked_songs command without joining voice channel.'
+            )
+            await ctx.respond('You need to join a voice channel first.')
+            return
+
+        voice_channel = ctx.author.voice.channel
+
+        # Get user's personal playlist name (their discord ID)
+        playlist_name = str(ctx.author.id)
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+
+        # Check if the playlist exists
+        if not os.path.exists(playlist_path):
+            await ctx.respond("You don't have any liked songs yet.")
+            ctxlog.warning(f'Liked songs playlist not found for user: {ctx.author.name}')
+            return
+
+        try:
+            # Read and validate playlist contents
+            with open(playlist_path, 'r', encoding='utf-8') as file:
+                songs = [line.strip() for line in file if line.strip()]
+
+            if not songs:
+                await ctx.respond('Your liked songs playlist is empty.')
+                return
+
+            # Add all songs to temp queue with shuffle
+            random.shuffle(songs)
+            self.queue.add_to_temp_queue(songs)
+            total_songs = len(songs)
+
+            # Connect to voice channel if needed
+            if ctx.voice_client is None:
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)
+
+            # Process first song immediately if nothing is playing
+            if not ctx.voice_client.is_playing():
+                first_song = self.queue.get_next_temp_songs(1)[0]
+                url, title, duration = await self.fetch_youtube_url(first_song)
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    ctx.voice_client.play(
+                        discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                        after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                    )
+                    await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                    await voice_channel.set_status(status=f'{title}')
+                    ctxlog.success(f'Started playing: {title}')
+
+            # Process initial batch of songs concurrently
+            initial_songs = self.queue.get_next_temp_songs(self.INITIAL_SONGS_TO_LOAD)
+            await ctx.respond(f'Loading your liked songs playlist with {total_songs} songs.')
+
+            # Fetch initial songs concurrently
+            fetch_tasks = [self.fetch_youtube_url(song) for song in initial_songs]
+            results = await asyncio.gather(*fetch_tasks)
+
+            processed_count = 0
+            for url, title, duration in results:
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+
+            remaining = self.queue.get_temp_queue_size()
+            await ctx.send(
+                f'Added {processed_count} songs to queue. {remaining} songs remaining in your liked songs playlist. '
+                f'More songs will be added automatically as the playlist progresses.'
+            )
+
+        except Exception as e:
+            error_msg = f'Error processing liked songs playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond(error_msg)
+
+    @commands.slash_command(
+        name='like_current_song',
+        description='Add the currently playing song to your personal liked songs playlist',
+    )
+    async def like_current_song(self, ctx: discord.ApplicationContext):
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used like_current_song command')
+
+        # Get user's personal playlist name (their discord ID)
+        playlist_name = str(ctx.author.id)
+        playlist_path = os.path.join(self.playlists_dir, f'{playlist_name}.txt')
+        current_song = self.get_current_song()
+        current_song_title = current_song[1]
+
+        # Check if there's a song currently playing
+        if not current_song:
+            await ctx.respond('No song is currently playing.')
+            ctxlog.warning('Attempted to like song when nothing was playing')
+            return
+
+        try:
+            # Create playlist if it doesn't exist
+            if not os.path.exists(playlist_path):
+                os.makedirs(self.playlists_dir, exist_ok=True)
+                with open(playlist_path, 'w', encoding='utf-8') as _:
+                    pass
+                ctxlog.info(f'Created new liked songs playlist for user: {ctx.author.name}')
+
+            # Read existing content to check if we need a newline
+            with open(playlist_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+
+            # Add the current song to the playlist
+            with open(playlist_path, 'a', encoding='utf-8') as file:
+                if content and not content.endswith('\n'):
+                    file.write('\n')
+                file.write(f'{current_song_title}\n')
+
+            await ctx.respond(f"Added '{current_song_title}' to your liked songs playlist.")
+            ctxlog.success(f"Added song to user's playlist: {current_song_title}")
+
+        except Exception as e:
+            error_msg = f'Error adding song to liked songs playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond('Failed to add song to your liked songs playlist. Please try again.')
 
 
 def setup(bot):
