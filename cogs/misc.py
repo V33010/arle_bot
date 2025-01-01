@@ -2,6 +2,8 @@ import discord
 from discord import Option
 from discord.ext import commands
 
+from utils.logger import get_context_logger
+
 
 class Miscellaneous(commands.Cog):
     def __init__(self, bot):
@@ -17,9 +19,14 @@ class Miscellaneous(commands.Cog):
         image: Option(discord.Attachment, 'The image to use for the emoji', required=True),
         name: Option(str, 'The name for the emoji', required=True),
     ):
+        ctxlogger = get_context_logger(ctx)
+        ctxlogger.info(f'{ctx.author.name} used command add_emoji')
         # Check if the user has the manage_emojis permission
         if not ctx.user.guild_permissions.manage_emojis:
             await ctx.respond("You don't have permission to add emojis!", ephemeral=True)
+            ctxlogger.warn(
+                f'{ctx.author.name} used add_emoji command without sufficient permissions'
+            )
             return
 
         # Get the guild's emoji limits
@@ -33,11 +40,13 @@ class Miscellaneous(commands.Cog):
                 f'Error: No emoji slots available! This server has reached its limit of {emoji_limit} emojis.',
                 ephemeral=True,
             )
+            ctxlogger.error(f'{ctx.guild.name} has no more emoji slots empty')
             return
 
         try:
             # Read the image
             image_bytes = await image.read()
+            ctxlogger.debug('Image read successfully')
 
             # Create the emoji
             new_emoji = await ctx.guild.create_custom_emoji(name=name, image=image_bytes)
@@ -46,6 +55,7 @@ class Miscellaneous(commands.Cog):
                 f'Successfully added emoji {new_emoji}!\n'
                 f'There are now {available_slots - 1} emoji slots remaining out of {emoji_limit} total slots.'
             )
+            ctxlogger.success(f'Added emoji successfully: {name}')
 
         except discord.HTTPException as e:
             if e.code == 50035:  # Invalid image data
@@ -54,8 +64,10 @@ class Miscellaneous(commands.Cog):
                     'and under 256KB in size.',
                     ephemeral=True,
                 )
+                ctxlogger.error('Invalid image format.')
             else:
                 await ctx.respond(f'Error: Failed to add emoji. {str(e)}', ephemeral=True)
+                ctxlogger.error(f'Failed to add emoji: {str(e)}')
 
 
 def setup(bot):
