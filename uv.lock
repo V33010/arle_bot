@@ -94,6 +94,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydub" },
     { name = "pynacl" },
+    { name = "pytube" },
     { name = "requests" },
     { name = "rich" },
     { name = "selenium" },
@@ -114,6 +115,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.10.1" },
     { name = "pydub", specifier = ">=0.25.1" },
     { name = "pynacl", specifier = ">=1.5.0" },
+    { name = "pytube", specifier = ">=15.0.0" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "selenium", specifier = ">=4.26.1" },
@@ -687,6 +689,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
+]
+
+[[package]]
+name = "pytube"
+version = "15.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/e7/16fec46c8d255c4bbc4b185d89c91dc92cdb802836570d8004d0db169c91/pytube-15.0.0.tar.gz", hash = "sha256:076052efe76f390dfa24b1194ff821d4e86c17d41cb5562f3a276a8bcbfc9d1d", size = 67229 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/64/bcf8632ed2b7a36bbf84a0544885ffa1d0b4bcf25cc0903dba66ec5fdad9/pytube-15.0.0-py3-none-any.whl", hash = "sha256:07b9904749e213485780d7eb606e5e5b8e4341aa4dccf699160876da00e12d78", size = 57594 },
 ]
 
 [[package]]
