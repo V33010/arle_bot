@@ -1,4 +1,3 @@
-# TODO: create play_yt_playlist command for handling youtube playlists
 import asyncio
 import functools
 import os
@@ -10,12 +9,19 @@ from concurrent.futures import ThreadPoolExecutor
 
 import discord
 import requests
+
+# import spotipy
 from discord.ext import commands
 from pytube import Playlist
+from spotipy import Spotify
+from spotipy.oauth2 import SpotifyClientCredentials
 from yt_dlp import YoutubeDL
 
 from utils.logger import get_context_logger, log
 from validators.config import ConfigValidator
+
+# from typing import Tuple
+
 
 with open(os.path.join('config.toml'), 'rb') as f:
     data = tomllib.load(f)
@@ -32,6 +38,46 @@ def format_duration(duration: int):
     seconds = duration % 60
     duration_str = f'{minutes}:{seconds:02d}'
     return duration_str
+
+
+async def get_playlist_tracks_async(
+    playlist_url: str, client_id: str, client_secret: str
+) -> list[str]:
+    """
+    Extract tracks from a public Spotify playlist asynchronously using client credentials
+    Returns list of tracks in 'song_name artist_name' format
+    """
+    # Initialize Spotify client with client credentials
+    auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+    sp = Spotify(auth_manager=auth_manager)
+
+    if 'spotify.com' in playlist_url:
+        playlist_id = playlist_url.split('/')[-1].split('?')[0]
+    else:
+        playlist_id = playlist_url
+
+    playlist_tracks = []
+    try:
+        results = sp.playlist_tracks(playlist_id)
+        while results:
+            for item in results['items']:
+                if item['track']:
+                    track = item['track']
+                    artist_name = track['artists'][0]['name'] if track['artists'] else ''
+                    track_info = f"{track['name']} {artist_name}"
+                    # Clean the track info
+                    track_info = ''.join(e for e in track_info if e.isalnum() or e.isspace())
+                    track_info = ''.join([i if ord(i) < 128 else ' ' for i in track_info])
+                    playlist_tracks.append(track_info)
+
+            if results['next']:
+                results = sp.next(results)
+            else:
+                results = None
+
+        return playlist_tracks
+    except Exception as e:
+        raise Exception(f'Error fetching Spotify playlist: {str(e)}')
 
 
 class MusicQueue:
@@ -96,6 +142,8 @@ class MusicYT(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.queue = MusicQueue()
+        self.spotify_client_id = arle_config.secrets.spotify_cid
+        self.spotify_client_secret = arle_config.secrets.spotify_cs
         self.thread_pool = ThreadPoolExecutor(max_workers=6)
         self.loop_type = None  # can be "all", "once" or None
         self.FFMPEG_OPTIONS = {
@@ -1675,6 +1723,113 @@ class MusicYT(commands.Cog):
             error_msg = f'Error adding song to liked songs playlist: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond('Failed to add song to your liked songs playlist. Please try again.')
+
+    @commands.slash_command(
+        name='play_playlist_spotify',
+        description='Play songs from a Spotify playlist URL',
+    )
+    async def play_playlist_spotify(self, ctx: discord.ApplicationContext, playlist_url: str):
+        """
+        Slash command to play songs from a Spotify playlist
+        Args:
+            ctx: Discord application context
+            playlist_url: Spotify playlist URL
+        """
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(
+            f'{ctx.author.name} used play_playlist_spotify command with URL: {playlist_url}'
+        )
+
+        await ctx.defer()
+
+        # Check if user is in voice channel
+        if ctx.author.voice is None:
+            ctxlog.warning(
+                'Attempted to use play_playlist_spotify command without joining voice channel.'
+            )
+            await ctx.respond('You need to join a voice channel first.')
+            return
+
+        voice_channel = ctx.author.voice.channel
+
+        try:
+            # Create playlists directory if it doesn't exist
+            os.makedirs('playlists', exist_ok=True)
+
+            # Extract playlist name from URL for file naming
+            playlist_id = playlist_url.split('/')[-1].split('?')[0]
+            playlist_path = os.path.join('playlists', f'spotify_{playlist_id}.txt')
+
+            # Fetch tracks from Spotify with credentials
+            try:
+                songs = await get_playlist_tracks_async(
+                    playlist_url, self.spotify_client_id, self.spotify_client_secret
+                )
+            except Exception as e:
+                await ctx.respond(f'Error fetching Spotify playlist: {str(e)}')
+                ctxlog.error(f'Spotify fetch error: {str(e)}')
+                return
+
+            if not songs:
+                await ctx.respond('This playlist appears to be empty or inaccessible.')
+                return
+
+            # Save playlist to file for future use
+            with open(playlist_path, 'w', encoding='utf-8') as file:
+                for song in songs:
+                    file.write(f'{song}\n')
+
+            # Shuffle the songs
+            random.shuffle(songs)
+
+            # Add songs to temp queue
+            self.queue.add_to_temp_queue(songs)
+            total_songs = len(songs)
+
+            # Connect to voice channel if needed
+            if ctx.voice_client is None:
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)
+
+            # Process first song immediately if nothing is playing
+            if not ctx.voice_client.is_playing():
+                first_song = self.queue.get_next_temp_songs(1)[0]
+                url, title, duration = await self.fetch_youtube_url(first_song)
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    ctx.voice_client.play(
+                        discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                        after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                    )
+                    await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                    await voice_channel.set_status(status=f'{title}')
+                    ctxlog.success(f'Started playing: {title}')
+
+            # Process initial batch of songs concurrently
+            initial_songs = self.queue.get_next_temp_songs(self.INITIAL_SONGS_TO_LOAD)
+            await ctx.respond(f'Loading Spotify playlist with {total_songs} songs.')
+
+            # Fetch initial songs concurrently
+            fetch_tasks = [self.fetch_youtube_url(song) for song in initial_songs]
+            results = await asyncio.gather(*fetch_tasks)
+
+            processed_count = 0
+            for url, title, duration in results:
+                if url:
+                    self.queue.add_song((url, title, duration))
+                    processed_count += 1
+                    ctxlog.info(f'Added to queue: {title}')
+
+            remaining = self.queue.get_temp_queue_size()
+            await ctx.send(
+                f'Added {processed_count} songs to queue. {remaining} songs remaining in playlist. '
+                f'More songs will be added automatically as the playlist progresses.'
+            )
+
+        except Exception as e:
+            error_msg = f'Error processing Spotify playlist: {str(e)}'
+            ctxlog.error(error_msg)
+            await ctx.respond(error_msg)
 
 
 def setup(bot):
