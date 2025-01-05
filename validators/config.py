@@ -21,6 +21,8 @@ class arleSecrets(CustomBaseModel):
     genius_token: str | None
     logfire_token: str | None
     youtube_api_key: str | None
+    spotify_cid: str | None
+    spotify_cs: str | None
 
 
 class devDb(CustomBaseModel):
