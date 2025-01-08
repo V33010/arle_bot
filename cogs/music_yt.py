@@ -165,6 +165,7 @@ class MusicYT(commands.Cog):
         self.thread_pool = ThreadPoolExecutor(max_workers=6)
         self.loop_types = {}  # Dictionary to store loop state for each server
         self.playback_times = {}
+        self.twenty_four_seven = {}
         self.current_url_info = {}  # Dictionary to store current URL info for each server
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -179,6 +180,8 @@ class MusicYT(commands.Cog):
             'socket_timeout': 10,
             'retries': 5,
             'nocheckcertificate': True,
+            'buffersize': 16384,
+            'format_sort': ['abr'],
         }
         self.youtube_api_key = youtube_api_key
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
@@ -334,8 +337,6 @@ class MusicYT(commands.Cog):
 
     async def play_next_song(self, ctx):
         guild_id = ctx.guild.id
-        if guild_id in self.playback_times:
-            del self.playback_times[guild_id]
         ctxlog = get_context_logger(ctx)
         try:
             # First determine and play the next song
@@ -358,12 +359,25 @@ class MusicYT(commands.Cog):
             if current_song and ctx.voice_client:
                 url, title, duration = current_song
 
-                if ctx.voice_client is None:
-                    voice_channel = ctx.author.voice.channel
-                    await voice_channel.connect()
-                    await asyncio.sleep(0.5)
+                # Check if the voice client is in a channel with members
+                voice_channel = ctx.voice_client.channel
+                member_count = len([m for m in voice_channel.members if not m.bot])
 
-                if ctx.voice_client and not ctx.voice_client.is_playing():
+                # Only disconnect if 24/7 mode is disabled and channel is empty
+                if member_count == 0 and not self.twenty_four_seven.get(guild_id, False):
+                    ctxlog.info(f'No users in voice channel for guild {guild_id}, disconnecting.')
+                    # Clean up
+                    if guild_id in self.playback_times:
+                        del self.playback_times[guild_id]
+                    queue_data = self.queue.get_queue(guild_id)
+                    queue_data['queue'] = []
+                    queue_data['current_index'] = -1
+                    queue_data['temp_queue'] = []
+
+                    await ctx.voice_client.disconnect()
+                    return
+
+                if ctx.voice_client.is_connected():
                     success = await self.play_audio(
                         ctx,
                         url,
@@ -374,11 +388,12 @@ class MusicYT(commands.Cog):
 
                     if success:
                         await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
-                        voice_channel = ctx.author.voice.channel
-                        await voice_channel.set_status(status=f'{title}')
+                        try:
+                            await voice_channel.set_status(status=f'{title}')
+                        except Exception as status_error:
+                            ctxlog.warning(f'Could not update status: {status_error}')
 
-                        # Now process more songs from temp queue if available
-                        # This happens after the next song has started playing
+                        # Process more songs from temp queue if available
                         if self.queue.get_temp_queue_size(guild_id) > 0:
                             asyncio.create_task(self.process_temp_queue(ctx))
                     else:
@@ -401,8 +416,9 @@ class MusicYT(commands.Cog):
                         del self.current_url_info[guild_id]
                     if guild_id in self.loop_types:
                         del self.loop_types[guild_id]
+                    if guild_id in self.playback_times:
+                        del self.playback_times[guild_id]
 
-                    # Disconnect the bot once all songs in the queue have been completed
                     await ctx.voice_client.disconnect()
 
         except Exception as e:
@@ -414,7 +430,6 @@ class MusicYT(commands.Cog):
                 if ctx.voice_client:
                     await ctx.voice_client.disconnect()
 
-                # Clean up server-specific states
                 queue_data = self.queue.get_queue(guild_id)
                 queue_data['queue'] = []
                 queue_data['temp_queue'] = []
@@ -424,6 +439,8 @@ class MusicYT(commands.Cog):
                     del self.current_url_info[guild_id]
                 if guild_id in self.loop_types:
                     del self.loop_types[guild_id]
+                if guild_id in self.playback_times:
+                    del self.playback_times[guild_id]
 
             except Exception as cleanup_error:
                 ctxlog.error(f'Error during cleanup: {cleanup_error}')
@@ -481,12 +498,17 @@ class MusicYT(commands.Cog):
                 if ctx.voice_client is None:
                     await voice_channel.connect()
                     await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
+                    # If 24/7 mode was enabled but bot disconnected, re-enable it
+                    if guild_id in self.twenty_four_seven:
+                        self.twenty_four_seven[guild_id] = True
                     ctxlog.info(f'Connected to voice channel in guild {guild_id}')
+
                 elif ctx.voice_client.channel != voice_channel:
                     # Move to the new channel if user is in a different one
                     await ctx.voice_client.move_to(voice_channel)
                     await asyncio.sleep(0.5)
                     ctxlog.info(f'Moved to different voice channel in guild {guild_id}')
+
             except Exception as e:
                 ctxlog.error(f'Error connecting to voice channel: {e}')
                 await ctx.send('Error connecting to voice channel. Please try again.')
@@ -947,7 +969,8 @@ class MusicYT(commands.Cog):
                 del self.loop_types[guild_id]
             if guild_id in self.playback_times:
                 del self.playback_times[guild_id]
-
+            if guild_id in self.twenty_four_seven:
+                del self.twenty_four_seven[guild_id]
             # Handle voice client
             voice_client = ctx.voice_client
             if voice_client:
@@ -1283,7 +1306,6 @@ class MusicYT(commands.Cog):
                 url, title, duration = await self.fetch_youtube_url(first_song, guild_id)
 
                 if url:
-                    ctxlog.info(f'Found url: {url}')
                     self.queue.add_song(guild_id, (url, title, duration))
                     ctx.voice_client.play(
                         discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
@@ -3191,6 +3213,52 @@ class MusicYT(commands.Cog):
                 )
             except Exception as debug_error:
                 ctxlog.error(f'Error gathering debug information: {debug_error}')
+
+    @commands.slash_command(
+        name='24x7',
+        description='Toggle 24/7 mode - bot will stay in channel even when empty',
+    )
+    async def _24x7(self, ctx: discord.ApplicationContext):
+        guild_id = ctx.guild.id
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used 24x7 command in guild {guild_id}')
+
+        try:
+            # Check if user is in a voice channel
+            if ctx.author.voice is None:
+                await ctx.respond('You need to be in a voice channel to use this command!')
+                return
+
+            # Toggle the state
+            current_state = self.twenty_four_seven.get(guild_id, False)
+            self.twenty_four_seven[guild_id] = not current_state
+
+            # Create response embed
+            embed = discord.Embed(
+                title='🎵 24/7 Mode',
+                color=(discord.Color.green() if not current_state else discord.Color.red()),
+                timestamp=discord.utils.utcnow(),
+            )
+
+            status = 'Enabled' if not current_state else 'Disabled'
+            embed.add_field(name='Status', value=f'24/7 Mode has been **{status}**', inline=False)
+
+            if not current_state:  # If enabling
+                embed.add_field(
+                    name='Info',
+                    value='Bot will now stay in the voice channel even when empty.',
+                    inline=False,
+                )
+
+            embed.set_footer(text=f'Requested by {ctx.author.name}')
+
+            await ctx.respond(embed=embed)
+            ctxlog.success(f'24/7 mode {status.lower()} for guild {guild_id}')
+
+        except Exception as e:
+            ctxlog.error(f'Error in 24x7 command for guild {guild_id}: {e}')
+            ctxlog.error(traceback.format_exc())
+            await ctx.respond('An error occurred while toggling 24/7 mode.')
 
 
 def setup(bot):
