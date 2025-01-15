@@ -24,7 +24,7 @@ dependencies = [
     "selenium>=4.26.1",
     "spotipy>=2.25.0",
     "typer>=0.13.1",
-    "yt-dlp>=2024.12.23",
+    "yt-dlp>=2025.1.12",
 ]
 [tool.ruff]
 line-length = 100
