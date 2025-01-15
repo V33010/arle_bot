@@ -434,7 +434,7 @@ class MusicYT(commands.Cog):
                         await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
                         try:
                             if voice_channel:  # Add check for voice_channel
-                                await voice_channel.set_status(status=f'{title}')
+                                await voice_channel.set_status(status=f'▶️ {title}')
                         except Exception as status_error:
                             ctxlog.warning(f'Could not update status: {status_error}')
 
@@ -494,129 +494,6 @@ class MusicYT(commands.Cog):
 
             except Exception as cleanup_error:
                 ctxlog.error(f'Error during cleanup: {cleanup_error}')
-
-    # async def play_next_song(self, ctx):
-    #     guild_id = ctx.guild.id
-    #     ctxlog = get_context_logger(ctx)
-    #     # Don't proceed if we're in the middle of a seek operation
-    #     if hasattr(self, "seeking") and guild_id in self.seeking:
-    #         ctxlog.debug(f"Skipping play_next_song due to seek operation.")
-    #         return
-    #
-    #     try:
-    #         # First determine and play the next song
-    #         current_song = None
-    #         if self.get_current_song(guild_id):
-    #             queue_data = self.queue.get_queue(guild_id)
-    #             loop_type = self.get_loop_type(guild_id)
-    #
-    #             if (
-    #                 loop_type == "all"
-    #                 and queue_data["current_index"] == len(queue_data["queue"]) - 1
-    #             ):
-    #                 queue_data["current_index"] = 0
-    #                 current_song = self.get_current_song(guild_id)
-    #             elif loop_type == "once":
-    #                 current_song = self.get_current_song(guild_id)
-    #             else:
-    #                 current_song = self.queue.next_song(guild_id)
-    #
-    #         if current_song and ctx.voice_client:
-    #             url, title, duration = current_song
-    #
-    #             # Check if the voice client is in a channel with members
-    #             voice_channel = ctx.voice_client.channel
-    #             member_count = len([m for m in voice_channel.members if not m.bot])
-    #
-    #             # Only disconnect if 24/7 mode is disabled and channel is empty
-    #             if member_count == 0 and not self.twenty_four_seven.get(
-    #                 guild_id, False
-    #             ):
-    #                 ctxlog.info(
-    #                     f"No users in voice channel for guild {guild_id}, disconnecting."
-    #                 )
-    #                 # Clean up
-    #                 if guild_id in self.playback_times:
-    #                     del self.playback_times[guild_id]
-    #                 queue_data = self.queue.get_queue(guild_id)
-    #                 queue_data["queue"] = []
-    #                 queue_data["current_index"] = -1
-    #                 queue_data["temp_queue"] = []
-    #
-    #                 await ctx.voice_client.disconnect()
-    #                 return
-    #
-    #             if ctx.voice_client.is_connected():
-    #                 success = await self.play_audio(
-    #                     ctx,
-    #                     url,
-    #                     title,
-    #                     duration,
-    #                     after=lambda e: self.bot.loop.create_task(
-    #                         self.play_next_song(ctx)
-    #                     ),
-    #                 )
-    #
-    #                 if success:
-    #                     await ctx.send(
-    #                         f"Now playing: {title} ({format_duration(duration)})"
-    #                     )
-    #                     try:
-    #                         await voice_channel.set_status(status=f"{title}")
-    #                     except Exception as status_error:
-    #                         ctxlog.warning(f"Could not update status: {status_error}")
-    #
-    #                     # Process more songs from temp queue if available
-    #                     if self.queue.get_temp_queue_size(guild_id) > 0:
-    #                         asyncio.create_task(self.process_temp_queue(ctx))
-    #                 else:
-    #                     await ctx.send("Failed to play the current song, skipping...")
-    #                     await self.play_next_song(ctx)
-    #         else:
-    #             if ctx.voice_client and not ctx.voice_client.is_playing():
-    #                 # Process any remaining songs in temp queue before disconnecting
-    #                 if self.queue.get_temp_queue_size(guild_id) > 0:
-    #                     await self.process_temp_queue(ctx)
-    #
-    #                 # Clear queues before disconnecting
-    #                 queue_data = self.queue.get_queue(guild_id)
-    #                 queue_data["queue"] = []
-    #                 queue_data["temp_queue"] = []
-    #                 queue_data["current_index"] = -1
-    #
-    #                 # Clean up server-specific states
-    #                 if guild_id in self.current_url_info:
-    #                     del self.current_url_info[guild_id]
-    #                 if guild_id in self.loop_types:
-    #                     del self.loop_types[guild_id]
-    #                 if guild_id in self.playback_times:
-    #                     del self.playback_times[guild_id]
-    #
-    #                 await ctx.voice_client.disconnect()
-    #
-    #     except Exception as e:
-    #         ctxlog.error(f"Error in play_next_song: {e}")
-    #         ctxlog.error(traceback.format_exc())
-    #
-    #         # Attempt to clean up on error
-    #         try:
-    #             if ctx.voice_client:
-    #                 await ctx.voice_client.disconnect()
-    #
-    #             queue_data = self.queue.get_queue(guild_id)
-    #             queue_data["queue"] = []
-    #             queue_data["temp_queue"] = []
-    #             queue_data["current_index"] = -1
-    #
-    #             if guild_id in self.current_url_info:
-    #                 del self.current_url_info[guild_id]
-    #             if guild_id in self.loop_types:
-    #                 del self.loop_types[guild_id]
-    #             if guild_id in self.playback_times:
-    #                 del self.playback_times[guild_id]
-    #
-    #         except Exception as cleanup_error:
-    #             ctxlog.error(f"Error during cleanup: {cleanup_error}")
 
     @commands.slash_command(name='play_music', description='Play music in your voice channel.')
     async def play_music(self, ctx: discord.ApplicationContext, query: str):
@@ -703,7 +580,7 @@ class MusicYT(commands.Cog):
 
                         if success:
                             await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
-                            await voice_channel.set_status(status=f'{title}')
+                            await voice_channel.set_status(status=f'▶️ {title}')
                             ctxlog.success(f'Started playing {title} in guild {guild_id}')
                         else:
                             await ctx.send('Failed to play the song. Skipping...')
@@ -1486,7 +1363,7 @@ class MusicYT(commands.Cog):
                     )
                     self.playback_times[guild_id] = time.time()
                     await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
-                    await voice_channel.set_status(status=f'{title}')
+                    await voice_channel.set_status(status=f'▶️ {title}')
                     ctxlog.success(f'Started playing: {title}')
 
             # Process initial batch of songs concurrently
@@ -1912,7 +1789,7 @@ class MusicYT(commands.Cog):
             # Update voice channel status
             try:
                 voice_channel = ctx.author.voice.channel
-                await voice_channel.set_status(status=f'{target_title}')
+                await voice_channel.set_status(status=f'▶️ {target_title}')
             except Exception as status_error:
                 ctxlog.warning(f'Could not update status: {status_error}')
 
@@ -2728,7 +2605,7 @@ class MusicYT(commands.Cog):
                             after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                         )
                         await ctx.send(f'🎵 Now playing: {title} ({format_duration(duration)})')
-                        await voice_channel.set_status(status=f'{title}')
+                        await voice_channel.set_status(status=f'▶️ {title}')
                         ctxlog.success(f'Started playing: {title} in guild {guild_id}')
 
                 # Process initial batch of songs concurrently
@@ -3021,7 +2898,7 @@ class MusicYT(commands.Cog):
                             after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                         )
                         await ctx.send(f'🎵 Now playing: {title} ({format_duration(duration)})')
-                        await voice_channel.set_status(status=f'{title}')
+                        await voice_channel.set_status(status=f'▶️ {title}')
                         ctxlog.success(f'Started playing: {title} in guild {guild_id}')
 
                 # Create initial response embed
@@ -3326,7 +3203,7 @@ class MusicYT(commands.Cog):
                             after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
                         )
                         await ctx.send(f'🎵 Now playing: {title} ({format_duration(duration)})')
-                        await voice_channel.set_status(status=f'{title}')
+                        await voice_channel.set_status(status=f'▶️ {title}')
                         ctxlog.success(f'Started playing: {title} in guild {guild_id}')
 
                 # Process initial batch of songs
