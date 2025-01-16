@@ -167,7 +167,6 @@ class MusicYT(commands.Cog):
         self.loop_types = {}  # Dictionary to store loop state for each server
         self.playback_times = {}
         self.twenty_four_seven = {}
-        self.current_url_info = {}  # Dictionary to store current URL info for each server
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
@@ -252,13 +251,7 @@ class MusicYT(commands.Cog):
                     video = info
 
                 # Store URL info for specific server
-                if guild_id not in self.current_url_info:
-                    self.current_url_info[guild_id] = {}
 
-                self.current_url_info[guild_id] = {
-                    'webpage_url': video.get('webpage_url') or video.get('url'),
-                    'title': video.get('title', 'Unknown Title'),
-                }
                 duration = video.get('duration', 0)
                 log.success('Found video!')
                 log.info(
@@ -283,23 +276,24 @@ class MusicYT(commands.Cog):
             log.error(f'Error in async YouTube fetch: {e}')
             return None, None, None
 
-    async def refresh_url(self, stored_info, guild_id):
-        """Refresh the streaming URL for a video for specific server"""
-        log.debug('Function refresh_url invoked')
+    async def refresh_url(self, title, guild_id):
+        """Fetch fresh URL for a song using its title"""
+        log.debug(f'Refreshing URL for song: {title}')
         try:
-            if stored_info and stored_info['webpage_url']:
-                with YoutubeDL(self.ydl_opts) as ydl:
-                    info = ydl.extract_info(stored_info['webpage_url'], download=False)
-                    duration = info.get('duration', 0)
+            with YoutubeDL(self.ydl_opts) as ydl:
+                # Directly search for the song using its title
+                info = ydl.extract_info(f'ytsearch:{title}', download=False)
 
-                    # Update stored info for this server
-                    if guild_id in self.current_url_info:
-                        self.current_url_info[guild_id]['webpage_url'] = info.get('webpage_url')
+                if 'entries' in info:
+                    video = info['entries'][0]  # Get the first search result
+                    url = video.get('url')
+                    duration = video.get('duration', 0)
 
-                    log.success(f"URL refreshed successfully: {info.get('url')}")
-                    return info.get('url'), stored_info['title'], duration
+                    log.success(f'Successfully fetched new URL for: {title}')
+                    return url, title, duration
+
         except Exception as e:
-            log.error(f'Error refreshing URL: {e}')
+            log.error(f'Error fetching new URL for {title}: {e}')
         return None, None, None
 
     async def play_audio(self, ctx, url, title, duration, after=None):
@@ -320,20 +314,17 @@ class MusicYT(commands.Cog):
             ctxlog.error(f'Playback error: {e}')
             # Try to refresh the URL and play again
             ctxlog.debug('Trying to refresh URL...')
-            if guild_id in self.current_url_info:
-                new_url, _, new_duration = await self.refresh_url(
-                    self.current_url_info[guild_id], guild_id
-                )
-                if new_url:
-                    try:
-                        ctx.voice_client.play(
-                            discord.FFmpegPCMAudio(new_url, **self.FFMPEG_OPTIONS),
-                            after=after,
-                        )
-                        ctxlog.success(f'URL refreshed successfully: {new_url}')
-                        return True
-                    except Exception as e2:
-                        ctxlog.error(f'Error after URL refresh: {e2}')
+            new_url, _, new_duration = await self.refresh_url(title, guild_id)
+            if new_url:
+                try:
+                    ctx.voice_client.play(
+                        discord.FFmpegPCMAudio(new_url, **self.FFMPEG_OPTIONS),
+                        after=after,
+                    )
+                    ctxlog.success(f'URL refreshed successfully: {new_url}')
+                    return True
+                except Exception as e2:
+                    ctxlog.error(f'Error after URL refresh: {e2}')
         return False
 
     async def play_next_song(self, ctx):
@@ -348,6 +339,7 @@ class MusicYT(commands.Cog):
         try:
             # First determine and play the next song
             current_song = None
+            queue_data = None
             if self.get_current_song(guild_id):
                 queue_data = self.queue.get_queue(guild_id)
                 loop_type = self.get_loop_type(guild_id)
@@ -364,6 +356,8 @@ class MusicYT(commands.Cog):
                     current_song = self.queue.next_song(guild_id)
 
             if current_song and ctx.voice_client:
+                ctxlog.info(f'Current song from play_next_song: {current_song}')
+                ctxlog.info(f"Current index from play_next_song: {queue_data["current_index"]}")
                 url, title, duration = current_song
 
                 # Try to refresh URL if needed
@@ -381,14 +375,12 @@ class MusicYT(commands.Cog):
                         ctxlog.warning(
                             f'URL expired, attempting refresh (attempt {retry_count + 1})'
                         )
-                        if guild_id in self.current_url_info:
-                            new_url, _, new_duration = await self.refresh_url(
-                                self.current_url_info[guild_id], guild_id
-                            )
-                            if new_url:
-                                url = new_url
-                                duration = new_duration
-                                break
+                        new_url, _, new_duration = await self.refresh_url(title, guild_id)
+                        if new_url:
+                            url = new_url
+                            duration = new_duration
+                            break
+
                         retry_count += 1
                         if retry_count < max_retries:
                             await asyncio.sleep(1)  # Wait before retrying
@@ -422,6 +414,7 @@ class MusicYT(commands.Cog):
                     return
 
                 if ctx.voice_client.is_connected():
+                    ctxlog.debug(f'Current URL: {url}')
                     success = await self.play_audio(
                         ctx,
                         url,
@@ -461,8 +454,6 @@ class MusicYT(commands.Cog):
                     queue_data['current_index'] = -1
 
                     # Clean up server-specific states
-                    if guild_id in self.current_url_info:
-                        del self.current_url_info[guild_id]
                     if guild_id in self.loop_types:
                         del self.loop_types[guild_id]
                     if guild_id in self.playback_times:
@@ -485,8 +476,6 @@ class MusicYT(commands.Cog):
                 queue_data['temp_queue'] = []
                 queue_data['current_index'] = -1
 
-                if guild_id in self.current_url_info:
-                    del self.current_url_info[guild_id]
                 if guild_id in self.loop_types:
                     del self.loop_types[guild_id]
                 if guild_id in self.playback_times:
@@ -599,8 +588,6 @@ class MusicYT(commands.Cog):
                     queue_data['temp_queue'] = []
                     queue_data['current_index'] = -1
 
-                    if guild_id in self.current_url_info:
-                        del self.current_url_info[guild_id]
                     if guild_id in self.loop_types:
                         del self.loop_types[guild_id]
 
@@ -619,8 +606,6 @@ class MusicYT(commands.Cog):
                 queue_data['temp_queue'] = []
                 queue_data['current_index'] = -1
 
-                if guild_id in self.current_url_info:
-                    del self.current_url_info[guild_id]
                 if guild_id in self.loop_types:
                     del self.loop_types[guild_id]
 
@@ -816,6 +801,15 @@ class MusicYT(commands.Cog):
             else:
                 ctxlog.success('Past songs displayed without chunking.')
                 await ctx.respond(past_songs)
+
+    @commands.slash_command(name='get_current_index', description='Get the current queue index.')
+    async def get_current_index(self, ctx: discord.ApplicationContext):
+        guild_id = ctx.guild.id
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used command get_current_index in guild {guild_id}')
+        queue_data = self.queue.get_queue(guild_id)
+        current_index = queue_data['current_index']
+        await ctx.respond(f'Current index: {current_index}')
 
     @commands.slash_command(name='previous', description='Play the previous song.')
     async def previous(self, ctx: discord.ApplicationContext):
@@ -1013,8 +1007,6 @@ class MusicYT(commands.Cog):
             )
 
             # Clean up server-specific states
-            if guild_id in self.current_url_info:
-                del self.current_url_info[guild_id]
             if guild_id in self.loop_types:
                 del self.loop_types[guild_id]
             if guild_id in self.playback_times:
@@ -1068,8 +1060,6 @@ class MusicYT(commands.Cog):
                 queue_data['temp_queue'] = []
                 queue_data['processing_lock'] = False
 
-                if guild_id in self.current_url_info:
-                    del self.current_url_info[guild_id]
                 if guild_id in self.loop_types:
                     del self.loop_types[guild_id]
                 if guild_id in self.playback_times:
@@ -2444,10 +2434,7 @@ class MusicYT(commands.Cog):
 
                 # Get the current URL or refresh it if needed
                 if not url:
-                    if guild_id in self.current_url_info:
-                        url, _, _ = await self.refresh_url(
-                            self.current_url_info[guild_id], guild_id
-                        )
+                    url, _, _ = await self.refresh_url(title, guild_id)
                     if not url:
                         await ctx.respond('Failed to seek. Please try again.')
                         ctxlog.error(f'Failed to refresh URL in guild {guild_id}')
@@ -2463,10 +2450,6 @@ class MusicYT(commands.Cog):
                 )
 
                 self.playback_times[guild_id] = time.time() - seek_position
-
-                # # Update queue index
-                # queue_data = self.queue.get_queue(guild_id)
-                # queue_data["current_index"] -= 1
 
                 # Create response embed
                 embed = discord.Embed(
