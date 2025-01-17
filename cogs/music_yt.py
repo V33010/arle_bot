@@ -135,11 +135,14 @@ class QueueView(discord.ui.View):
             inline=False,
         )
 
-        # Add page information
-        embed.set_footer(
-            text=f'Page {self.current_page + 1}/{self.total_pages} • '
+        footer_text = (
+            f'Currently Playing: {current_index + 1}/{total_songs} • '
+            f'Page {self.current_page + 1}/{self.total_pages} • '
             f'Showing songs {start_idx + 1}-{min(end_idx, total_songs)} of {total_songs}'
         )
+
+        # Add page information
+        embed.set_footer(text=footer_text)
 
         return embed
 
