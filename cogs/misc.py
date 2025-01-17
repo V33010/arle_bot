@@ -21,6 +21,7 @@ class Miscellaneous(commands.Cog):
         image: Option(discord.Attachment, 'The image to use for the emoji', required=True),
         name: Option(str, 'The name for the emoji', required=True),
     ):
+        await ctx.defer()
         ctxlogger = get_context_logger(ctx)
         ctxlogger.info(f'{ctx.author.name} used command add_emoji')
         # Check if the user has the manage_emojis permission
