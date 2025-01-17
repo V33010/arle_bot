@@ -721,6 +721,17 @@ class MusicYT(commands.Cog):
                     inline=False,
                 )
 
+                # Get loop status and create footer text
+                loop_type = self.get_loop_type(guild_id)
+                if loop_type == 'all':
+                    footer_text = '🔁 Loop: ALL'
+                elif loop_type == 'once':
+                    footer_text = '🔂 Loop: ONCE'
+                else:
+                    footer_text = '➡️ Loop: OFF'
+
+                embed.set_footer(text=footer_text)
+
                 await ctx.respond(embed=embed)
                 ctxlog.success(
                     f'Now playing {song_title} at {current_timestamp}/{total_duration} '
