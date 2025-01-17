@@ -65,6 +65,7 @@ def main():
         'cogs.music_yt',
         'cogs.help',
         'cogs.misc',
+        # 'cogs.video',
     ]
 
     if arle_config.arle.local_music:

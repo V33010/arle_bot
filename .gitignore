@@ -1,3 +1,4 @@
+videos/
 dev.db*
 prod.db*
 config.toml
