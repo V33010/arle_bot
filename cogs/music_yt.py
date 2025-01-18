@@ -762,6 +762,7 @@ class MusicYT(commands.Cog):
         guild_id = ctx.guild.id
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command nowplaying in guild {guild_id}')
+        await ctx.defer()
 
         try:
             if not ctx.voice_client or not self.get_current_song(guild_id):
@@ -771,8 +772,21 @@ class MusicYT(commands.Cog):
 
             current_song = self.get_current_song(guild_id)
             if current_song:
-                song_title = current_song[1]
-                total_duration = current_song[2]
+                url, song_title, total_duration = current_song
+
+                # Fetch thumbnail using yt-dlp
+                try:
+                    with YoutubeDL(self.ydl_opts) as ydl:
+                        # Use webpage_url from stored info or search for the song
+                        info = ydl.extract_info(f'ytsearch:{song_title}', download=False)
+                        if 'entries' in info:
+                            thumbnail_url = info['entries'][0].get('thumbnail')
+                        else:
+                            thumbnail_url = info.get('thumbnail')
+                        ctxlog.debug(f'Fetched thumbnail URL: {thumbnail_url}')
+                except Exception as thumb_error:
+                    ctxlog.warning(f'Could not fetch thumbnail: {thumb_error}')
+                    thumbnail_url = None
 
                 # Calculate current timestamp
                 if guild_id in self.playback_times and ctx.voice_client.is_playing():
@@ -788,6 +802,10 @@ class MusicYT(commands.Cog):
                     color=discord.Color.blue(),
                     timestamp=discord.utils.utcnow(),
                 )
+
+                # Set thumbnail if available
+                if thumbnail_url:
+                    embed.set_thumbnail(url=thumbnail_url)
 
                 # Add timestamp field
                 embed.add_field(
@@ -835,6 +853,85 @@ class MusicYT(commands.Cog):
             ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while getting the current song information.')
 
+    #
+    # @commands.slash_command(name='nowplaying', description='Display the currently playing song.')
+    # async def nowplaying(self, ctx: discord.ApplicationContext):
+    #     guild_id = ctx.guild.id
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(f'{ctx.author.name} used command nowplaying in guild {guild_id}')
+    #
+    #     try:
+    #         if not ctx.voice_client or not self.get_current_song(guild_id):
+    #             await ctx.respond('No song is currently playing.')
+    #             ctxlog.warning(f'No song playing currently in guild {guild_id}')
+    #             return
+    #
+    #         current_song = self.get_current_song(guild_id)
+    #         if current_song:
+    #             song_title = current_song[1]
+    #             total_duration = current_song[2]
+    #
+    #             # Calculate current timestamp
+    #             if guild_id in self.playback_times and ctx.voice_client.is_playing():
+    #                 elapsed_time = int(time.time() - self.playback_times[guild_id])
+    #                 current_timestamp = min(elapsed_time, total_duration)
+    #             else:
+    #                 current_timestamp = 0
+    #
+    #             # Create embed for better presentation
+    #             embed = discord.Embed(
+    #                 title='🎵 Now Playing',
+    #                 description=song_title,
+    #                 color=discord.Color.blue(),
+    #                 timestamp=discord.utils.utcnow(),
+    #             )
+    #
+    #             # Add timestamp field
+    #             embed.add_field(
+    #                 name='Time',
+    #                 value=f'`{format_duration(current_timestamp)}/{format_duration(total_duration)}`',
+    #                 inline=False,
+    #             )
+    #
+    #             # Create progress bar
+    #             bar_length = 20
+    #             progress = current_timestamp / total_duration if total_duration > 0 else 0
+    #             filled = int(bar_length * progress)
+    #             progress_bar = '▰' * filled + '▱' * (bar_length - filled)
+    #
+    #             embed.add_field(
+    #                 name='Progress',
+    #                 value=f'`{progress_bar}` {(progress * 100):.1f}%',
+    #                 inline=False,
+    #             )
+    #
+    #             # Get loop status and create footer text
+    #             loop_type = self.get_loop_type(guild_id)
+    #             if loop_type == 'all':
+    #                 footer_text = '🔁 Loop: ALL'
+    #             elif loop_type == 'once':
+    #                 footer_text = '🔂 Loop: ONCE'
+    #             else:
+    #                 footer_text = '➡️ Loop: OFF'
+    #
+    #             embed.set_footer(text=footer_text)
+    #
+    #             await ctx.respond(embed=embed)
+    #             ctxlog.success(
+    #                 f'Now playing {song_title} at {current_timestamp}/{total_duration} '
+    #                 f'in guild {guild_id}'
+    #             )
+    #         else:
+    #             ctxlog.error(
+    #                 f"Could not find current song in function 'nowplaying' " f'for guild {guild_id}'
+    #             )
+    #             await ctx.respond('Error retrieving current song information.')
+    #
+    #     except Exception as e:
+    #         ctxlog.error(f'Error in nowplaying command for guild {guild_id}: {e}')
+    #         ctxlog.error(traceback.format_exc())
+    #         await ctx.respond('An error occurred while getting the current song information.')
+    #
     @commands.slash_command(name='display_queue_long', description='Display the entire queue.')
     async def display_queue_long(self, ctx: discord.ApplicationContext):
         guild_id = ctx.guild.id
