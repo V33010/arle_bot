@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import math
 import os
 import random
 import re
@@ -80,6 +81,92 @@ async def get_playlist_tracks_async(
         return playlist_tracks
     except Exception as e:
         raise Exception(f'Error fetching Spotify playlist: {str(e)}')
+
+
+class QueueView(discord.ui.View):
+    def __init__(self, queue_data, songs_per_page=10):
+        super().__init__(timeout=60)  # 60 seconds timeout
+        self.queue_data = queue_data
+        self.current_page = 0
+        self.songs_per_page = songs_per_page
+        self.total_pages = math.ceil(len(queue_data['queue']) / songs_per_page)
+
+        # Update button states
+        self.update_buttons()
+
+    def update_buttons(self):
+        # Disable/Enable previous button
+        self.previous_page.disabled = self.current_page == 0
+        # Disable/Enable next button
+        self.next_page.disabled = self.current_page >= self.total_pages - 1
+
+    def get_embed(self):
+        start_idx = self.current_page * self.songs_per_page
+        end_idx = start_idx + self.songs_per_page
+        current_songs = self.queue_data['queue'][start_idx:end_idx]
+        current_index = self.queue_data['current_index']
+
+        embed = discord.Embed(
+            title='🎵 Queue',
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow(),
+        )
+
+        description = []
+        for i, song in enumerate(current_songs, start=start_idx):
+            _, title, duration = song
+            line = f'`{i + 1}.` ({format_duration(duration)}) | {title}'
+            if i == current_index:
+                line += ' ▶️'
+            description.append(line)
+
+        if description:
+            embed.description = '\n'.join(description)
+        else:
+            embed.description = 'No songs in this page'
+
+        # Add queue information
+        total_songs = len(self.queue_data['queue'])
+        total_duration = sum(song[2] for song in self.queue_data['queue'])
+
+        embed.add_field(
+            name='Queue Info',
+            value=f'**Total Songs:** {total_songs}\n**Total Duration:** {format_duration(total_duration)}',
+            inline=False,
+        )
+
+        footer_text = (
+            f'Currently Playing: {current_index + 1}/{total_songs} • '
+            f'Page {self.current_page + 1}/{self.total_pages} • '
+            f'Showing songs {start_idx + 1}-{min(end_idx, total_songs)} of {total_songs}'
+        )
+
+        # Add page information
+        embed.set_footer(text=footer_text)
+
+        return embed
+
+    @discord.ui.button(label='Previous', style=discord.ButtonStyle.grey, emoji='⬅️')
+    async def previous_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    @discord.ui.button(label='Next', style=discord.ButtonStyle.grey, emoji='➡️')
+    async def next_page(self, button: discord.ui.Button, interaction: discord.Interaction):
+        self.current_page = min(self.total_pages - 1, self.current_page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.get_embed(), view=self)
+
+    async def on_timeout(self):
+        # Disable all buttons when the view times out
+        for item in self.children:
+            item.disabled = True
+        # Try to update the message with disabled buttons
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            pass
 
 
 class MusicQueue:
@@ -185,7 +272,7 @@ class MusicYT(commands.Cog):
         }
         self.youtube_api_key = youtube_api_key
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
-        self.INITIAL_SONGS_TO_LOAD = 4
+        self.INITIAL_SONGS_TO_LOAD = 3
         self.SONGS_TO_ADD_ON_NEXT = 2
 
     def get_loop_type(self, guild_id):
@@ -721,6 +808,17 @@ class MusicYT(commands.Cog):
                     inline=False,
                 )
 
+                # Get loop status and create footer text
+                loop_type = self.get_loop_type(guild_id)
+                if loop_type == 'all':
+                    footer_text = '🔁 Loop: ALL'
+                elif loop_type == 'once':
+                    footer_text = '🔂 Loop: ONCE'
+                else:
+                    footer_text = '➡️ Loop: OFF'
+
+                embed.set_footer(text=footer_text)
+
                 await ctx.respond(embed=embed)
                 ctxlog.success(
                     f'Now playing {song_title} at {current_timestamp}/{total_duration} '
@@ -753,32 +851,24 @@ class MusicYT(commands.Cog):
                 ctxlog.warning(f'Queue is currently empty in guild {guild_id}')
                 return
 
-            queue_message = ''
-            current_index = queue_data['current_index']
+            # Create the view and get initial embed
+            view = QueueView(queue_data)
+            embed = view.get_embed()
 
-            for i in range(total_length):
-                song = queue_data['queue'][i]
-                if i == current_index:
-                    queue_message += f'{i}. ({format_duration(song[2])}) | {song[1]} ▶️\n'
-                else:
-                    queue_message += f'{i}. ({format_duration(song[2])}) | {song[1]}\n'
+            # Send the message
+            message = await ctx.respond(embed=embed, view=view)
 
-            queue_message = (
-                f'Currently playing {current_index + 1} of {total_length}\n' + queue_message
-            )
-
-            if len(queue_message) > 2000:
-                await ctx.respond('Showing complete queue...')
-                chunks = [queue_message[i : i + 2000] for i in range(0, len(queue_message), 2000)]
-                for chunk in chunks:
-                    await ctx.send(chunk)
-                ctxlog.success(f'Complete queue displayed with chunking for guild {guild_id}')
+            # Store the message for timeout handling
+            if isinstance(message, discord.Webhook):
+                view.message = await message.fetch()
             else:
-                await ctx.respond(queue_message)
-                ctxlog.success(f'Complete queue displayed without chunking for guild {guild_id}')
+                view.message = message
+
+            ctxlog.success(f'Queue displayed with pagination for guild {guild_id}')
 
         except Exception as e:
             ctxlog.error(f'Error in display_queue_long: {e}')
+            ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while displaying the queue.')
 
     @commands.slash_command(name='past_songs', description='Display the previously played songs.')
@@ -1077,33 +1167,135 @@ class MusicYT(commands.Cog):
         description='Display the next 10 songs and total songs in queue',
     )
     async def display_queue(self, ctx: discord.ApplicationContext):
-        ctxlog = get_context_logger(ctx)
-        ctxlog.info(f'{ctx.author.name} used command display_queue')
         guild_id = ctx.guild.id
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used command display_queue in guild {guild_id}')
+
+        file = discord.File(
+            'image_assets/31e0895d-7eac-43a3-b926-9f4781c08435.webp',
+            filename='queue_image.webp',
+        )
+
         queue_data = self.queue.get_queue(guild_id)
         if len(queue_data['queue']) == 0:
             await ctx.respond('The queue is currently empty.')
             return
+
         try:
-            next_songs = queue_data['queue'][
-                queue_data['current_index'] + 1 : queue_data['current_index'] + 11
-            ]
-        except IndexError:
-            next_songs = queue_data['queue'][queue_data['current_index'] :]
-        next_song_titles = [song_info[1] for song_info in next_songs]
-        next_song_durations = [song_info[2] for song_info in next_songs]
-        n = 10
-        if len(next_song_titles) < 10:
-            n = len(next_song_titles)
-        queue_message = f'Next {n} songs in queue:\n'
-        for i in range(len(next_song_titles)):
-            queue_message += (
-                f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]}'
+            # Get current song info
+            current_song = self.get_current_song(guild_id)
+            current_title = current_song[1] if current_song else 'Unknown'
+            current_duration = current_song[2] if current_song else 0
+            current_index = queue_data['current_index']
+
+            # Get next songs
+            try:
+                next_songs = queue_data['queue'][
+                    queue_data['current_index'] + 1 : queue_data['current_index'] + 11
+                ]
+            except IndexError:
+                next_songs = queue_data['queue'][queue_data['current_index'] + 1 :]
+
+            # Create embed
+            embed = discord.Embed(
+                title='🎵 Queue Preview',
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow(),
             )
-        total_songs = len(queue_data['queue'][queue_data['current_index'] :])
-        queue_message += f'\n\nTotal songs in queue: {total_songs}'
-        await ctx.respond(queue_message)
-        ctxlog.success('Sent display_queue successfully!')
+
+            # Add current song field
+            embed.add_field(
+                name='🔊 Now Playing',
+                value=f'**{current_title}**\n`Duration:` {format_duration(current_duration)}',
+                inline=False,
+            )
+
+            # Add separator
+            embed.add_field(name='⎯' * 50, value='', inline=False)
+
+            # Add upcoming songs
+            if next_songs:
+                upcoming_description = []
+                total_duration = 0
+                for i, (_, title, duration) in enumerate(next_songs, 1):
+                    total_duration += duration
+                    time_until = sum(song[2] for song in next_songs[: i - 1])
+                    upcoming_description.append(
+                        f'`{i}.` **{title}**\n'
+                        f'┗ Duration: {format_duration(duration)} • Plays in: {format_duration(time_until)}'
+                    )
+
+                embed.add_field(
+                    name='📋 Up Next',
+                    value='\n'.join(upcoming_description) or 'No upcoming songs',
+                    inline=False,
+                )
+            else:
+                embed.add_field(name='📋 Up Next', value='*No more songs in queue*', inline=False)
+
+            # Add queue statistics
+            remaining_songs = len(queue_data['queue']) - (current_index + 1)
+            total_remaining_duration = sum(
+                song[2] for song in queue_data['queue'][current_index + 1 :]
+            )
+
+            stats = (
+                f'**Songs Remaining:** {remaining_songs}\n'
+                f'**Total Duration:** {format_duration(total_remaining_duration)}\n'
+                f'**Songs Shown:** {len(next_songs)}/10'
+            )
+
+            embed.add_field(name='📊 Queue Stats', value=stats, inline=False)
+
+            # Set thumbnail
+            embed.set_thumbnail(url=('attachment://queue_image.webp'))
+
+            # Set footer with current position
+            embed.set_footer(
+                text=f"Currently Playing: {current_index + 1}/{len(queue_data['queue'])} • "
+                f"Queue length: {format_duration(total_remaining_duration)}"
+            )
+
+            await ctx.respond(embed=embed, file=file)
+            ctxlog.success('Sent display_queue successfully!')
+
+        except Exception as e:
+            ctxlog.error(f'Error in display_queue: {e}')
+            ctxlog.error(traceback.format_exc())
+            await ctx.respond('An error occurred while displaying the queue.')
+
+    # @commands.slash_command(
+    #     name='display_queue',
+    #     description='Display the next 10 songs and total songs in queue',
+    # )
+    # async def display_queue(self, ctx: discord.ApplicationContext):
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(f'{ctx.author.name} used command display_queue')
+    #     guild_id = ctx.guild.id
+    #     queue_data = self.queue.get_queue(guild_id)
+    #     if len(queue_data['queue']) == 0:
+    #         await ctx.respond('The queue is currently empty.')
+    #         return
+    #     try:
+    #         next_songs = queue_data['queue'][
+    #             queue_data['current_index'] + 1 : queue_data['current_index'] + 11
+    #         ]
+    #     except IndexError:
+    #         next_songs = queue_data['queue'][queue_data['current_index'] :]
+    #     next_song_titles = [song_info[1] for song_info in next_songs]
+    #     next_song_durations = [song_info[2] for song_info in next_songs]
+    #     n = 10
+    #     if len(next_song_titles) < 10:
+    #         n = len(next_song_titles)
+    #     queue_message = f'Next {n} songs in queue:\n'
+    #     for i in range(len(next_song_titles)):
+    #         queue_message += (
+    #             f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]}'
+    #         )
+    #     total_songs = len(queue_data['queue'][queue_data['current_index'] :])
+    #     queue_message += f'\n\nTotal songs in queue: {total_songs}'
+    #     await ctx.respond(queue_message)
+    #     ctxlog.success('Sent display_queue successfully!')
 
     @commands.slash_command(
         name='shuffle', description='Shuffle all the remaining songs in the queue.'
