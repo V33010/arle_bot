@@ -26,6 +26,11 @@ from validators.config import ConfigValidator
 # from typing import Tuple
 
 
+cookies_path = os.path.abspath('cookies/cookies.txt')
+# print(f"Cookies Path: {cookies_path}")
+# print(f"File Exists: {os.path.exists(cookies_path)}")
+
+
 with open(os.path.join('config.toml'), 'rb') as f:
     data = tomllib.load(f)
 arle_config: ConfigValidator = ConfigValidator.model_validate(data)
@@ -276,6 +281,7 @@ class MusicYT(commands.Cog):
             'nocheckcertificate': True,
             'buffersize': 16384,
             'format_sort': ['abr'],
+            # "cookiefile": cookies_path,  # NOTE: Comment out this line when not using cookies. Cookies to be stored in cookies/cookies.txt
         }
         self.youtube_api_key = youtube_api_key
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
