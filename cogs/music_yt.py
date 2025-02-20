@@ -26,6 +26,11 @@ from validators.config import ConfigValidator
 # from typing import Tuple
 
 
+cookies_path = os.path.abspath('cookies/cookies.txt')
+# print(f"Cookies Path: {cookies_path}")
+# print(f"File Exists: {os.path.exists(cookies_path)}")
+
+
 with open(os.path.join('config.toml'), 'rb') as f:
     data = tomllib.load(f)
 arle_config: ConfigValidator = ConfigValidator.model_validate(data)
@@ -33,6 +38,13 @@ arle_config: ConfigValidator = ConfigValidator.model_validate(data)
 youtube_api_key = arle_config.secrets.youtube_api_key
 
 # log.info(f"youtube_api_key: {youtube_api_key}")
+
+
+def truncate_field_value(value: str, limit: int = 1024) -> str:
+    """Truncate a field value to fit Discord's limits"""
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3] + '...'
 
 
 def format_duration(duration: int):
@@ -269,6 +281,7 @@ class MusicYT(commands.Cog):
             'nocheckcertificate': True,
             'buffersize': 16384,
             'format_sort': ['abr'],
+            # "cookiefile": cookies_path,  # NOTE: Comment out this line when not using cookies. Cookies to be stored in cookies/cookies.txt
         }
         self.youtube_api_key = youtube_api_key
         self.playlists_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'playlists')
@@ -762,6 +775,7 @@ class MusicYT(commands.Cog):
         guild_id = ctx.guild.id
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command nowplaying in guild {guild_id}')
+        await ctx.defer()
 
         try:
             if not ctx.voice_client or not self.get_current_song(guild_id):
@@ -771,8 +785,24 @@ class MusicYT(commands.Cog):
 
             current_song = self.get_current_song(guild_id)
             if current_song:
-                song_title = current_song[1]
-                total_duration = current_song[2]
+                url, song_title, total_duration = current_song
+
+                # Fast thumbnail fetch using URL pattern
+                try:
+                    with YoutubeDL(self.ydl_opts) as ydl:
+                        # Search using the song title
+                        ctxlog.info('Starting YoutubeDL search...')
+                        info = ydl.extract_info(f'ytsearch:{song_title}', download=False)
+                        ctxlog.info('YoutubeDL search completed')
+                        if 'entries' in info:
+                            video_id = info['entries'][0]['id']
+                            thumbnail_url = f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+                            ctxlog.debug(f'Generated thumbnail URL: {thumbnail_url}')
+                        else:
+                            thumbnail_url = None
+                except Exception as thumb_error:
+                    ctxlog.warning(f'Could not generate thumbnail URL: {thumb_error}')
+                    thumbnail_url = None
 
                 # Calculate current timestamp
                 if guild_id in self.playback_times and ctx.voice_client.is_playing():
@@ -788,6 +818,11 @@ class MusicYT(commands.Cog):
                     color=discord.Color.blue(),
                     timestamp=discord.utils.utcnow(),
                 )
+
+                # Set thumbnail if available
+                if thumbnail_url:
+                    # embed.set_thumbnail(url=thumbnail_url)
+                    embed.set_image(url=thumbnail_url)
 
                 # Add timestamp field
                 embed.add_field(
@@ -1170,6 +1205,7 @@ class MusicYT(commands.Cog):
         guild_id = ctx.guild.id
         ctxlog = get_context_logger(ctx)
         ctxlog.info(f'{ctx.author.name} used command display_queue in guild {guild_id}')
+        await ctx.defer()
 
         file = discord.File(
             'image_assets/31e0895d-7eac-43a3-b926-9f4781c08435.webp',
@@ -1211,19 +1247,32 @@ class MusicYT(commands.Cog):
             )
 
             # Add separator
-            embed.add_field(name='⎯' * 50, value='', inline=False)
+            embed.add_field(name='⎯' * 20, value='', inline=False)
 
-            # Add upcoming songs
+            # Add upcoming songs with length checking
             if next_songs:
                 upcoming_description = []
                 total_duration = 0
+                current_length = 0
+
                 for i, (_, title, duration) in enumerate(next_songs, 1):
                     total_duration += duration
                     time_until = sum(song[2] for song in next_songs[: i - 1])
-                    upcoming_description.append(
-                        f'`{i}.` **{title}**\n'
+
+                    # Create the line for this song
+                    song_line = (
+                        f'`{i}.` 💠 **{title}**\n'
                         f'┗ Duration: {format_duration(duration)} • Plays in: {format_duration(time_until)}'
                     )
+
+                    # Check if adding this line would exceed Discord's limit
+                    if current_length + len(song_line) + 1 < 1024:  # +1 for newline
+                        upcoming_description.append(song_line)
+                        current_length += len(song_line) + 1
+                    else:
+                        # If we would exceed the limit, add an indicator and break
+                        upcoming_description.append('*...and more songs*')
+                        break
 
                 embed.add_field(
                     name='📋 Up Next',
@@ -1247,8 +1296,7 @@ class MusicYT(commands.Cog):
 
             embed.add_field(name='📊 Queue Stats', value=stats, inline=False)
 
-            # Set thumbnail
-            embed.set_thumbnail(url=('attachment://queue_image.webp'))
+            embed.set_thumbnail(url='attachment://queue_image.webp')
 
             # Set footer with current position
             embed.set_footer(
@@ -1265,37 +1313,108 @@ class MusicYT(commands.Cog):
             await ctx.respond('An error occurred while displaying the queue.')
 
     # @commands.slash_command(
-    #     name='display_queue',
-    #     description='Display the next 10 songs and total songs in queue',
+    #     name="display_queue",
+    #     description="Display the next 10 songs and total songs in queue",
     # )
     # async def display_queue(self, ctx: discord.ApplicationContext):
-    #     ctxlog = get_context_logger(ctx)
-    #     ctxlog.info(f'{ctx.author.name} used command display_queue')
     #     guild_id = ctx.guild.id
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(f"{ctx.author.name} used command display_queue in guild {guild_id}")
+    #
+    #     file = discord.File(
+    #         "image_assets/31e0895d-7eac-43a3-b926-9f4781c08435.webp",
+    #         filename="queue_image.webp",
+    #     )
+    #
     #     queue_data = self.queue.get_queue(guild_id)
-    #     if len(queue_data['queue']) == 0:
-    #         await ctx.respond('The queue is currently empty.')
+    #     if len(queue_data["queue"]) == 0:
+    #         await ctx.respond("The queue is currently empty.")
     #         return
+    #
     #     try:
-    #         next_songs = queue_data['queue'][
-    #             queue_data['current_index'] + 1 : queue_data['current_index'] + 11
-    #         ]
-    #     except IndexError:
-    #         next_songs = queue_data['queue'][queue_data['current_index'] :]
-    #     next_song_titles = [song_info[1] for song_info in next_songs]
-    #     next_song_durations = [song_info[2] for song_info in next_songs]
-    #     n = 10
-    #     if len(next_song_titles) < 10:
-    #         n = len(next_song_titles)
-    #     queue_message = f'Next {n} songs in queue:\n'
-    #     for i in range(len(next_song_titles)):
-    #         queue_message += (
-    #             f'\n{i}. ({format_duration(next_song_durations[i])}) | {next_song_titles[i]}'
+    #         # Get current song info
+    #         current_song = self.get_current_song(guild_id)
+    #         current_title = current_song[1] if current_song else "Unknown"
+    #         current_duration = current_song[2] if current_song else 0
+    #         current_index = queue_data["current_index"]
+    #
+    #         # Get next songs
+    #         try:
+    #             next_songs = queue_data["queue"][
+    #                 queue_data["current_index"] + 1 : queue_data["current_index"] + 11
+    #             ]
+    #         except IndexError:
+    #             next_songs = queue_data["queue"][queue_data["current_index"] + 1 :]
+    #
+    #         # Create embed
+    #         embed = discord.Embed(
+    #             title="🎵 Queue Preview",
+    #             color=discord.Color.blue(),
+    #             timestamp=discord.utils.utcnow(),
     #         )
-    #     total_songs = len(queue_data['queue'][queue_data['current_index'] :])
-    #     queue_message += f'\n\nTotal songs in queue: {total_songs}'
-    #     await ctx.respond(queue_message)
-    #     ctxlog.success('Sent display_queue successfully!')
+    #
+    #         # Add current song field
+    #         embed.add_field(
+    #             name="🔊 Now Playing",
+    #             value=f"**{current_title}**\n`Duration:` {format_duration(current_duration)}",
+    #             inline=False,
+    #         )
+    #
+    #         # Add separator
+    #         embed.add_field(name="⎯" * 50, value="", inline=False)
+    #
+    #         # Add upcoming songs
+    #         if next_songs:
+    #             upcoming_description = []
+    #             total_duration = 0
+    #             for i, (_, title, duration) in enumerate(next_songs, 1):
+    #                 total_duration += duration
+    #                 time_until = sum(song[2] for song in next_songs[: i - 1])
+    #                 upcoming_description.append(
+    #                     f"`{i}.` **{title}**\n"
+    #                     f"┗ Duration: {format_duration(duration)} • Plays in: {format_duration(time_until)}"
+    #                 )
+    #
+    #             embed.add_field(
+    #                 name="📋 Up Next",
+    #                 value="\n".join(upcoming_description) or "No upcoming songs",
+    #                 inline=False,
+    #             )
+    #         else:
+    #             embed.add_field(
+    #                 name="📋 Up Next", value="*No more songs in queue*", inline=False
+    #             )
+    #
+    #         # Add queue statistics
+    #         remaining_songs = len(queue_data["queue"]) - (current_index + 1)
+    #         total_remaining_duration = sum(
+    #             song[2] for song in queue_data["queue"][current_index + 1 :]
+    #         )
+    #
+    #         stats = (
+    #             f"**Songs Remaining:** {remaining_songs}\n"
+    #             f"**Total Duration:** {format_duration(total_remaining_duration)}\n"
+    #             f"**Songs Shown:** {len(next_songs)}/10"
+    #         )
+    #
+    #         embed.add_field(name="📊 Queue Stats", value=stats, inline=False)
+    #
+    #         # Set thumbnail
+    #         embed.set_thumbnail(url=("attachment://queue_image.webp"))
+    #
+    #         # Set footer with current position
+    #         embed.set_footer(
+    #             text=f"Currently Playing: {current_index + 1}/{len(queue_data['queue'])} • "
+    #             f"Queue length: {format_duration(total_remaining_duration)}"
+    #         )
+    #
+    #         await ctx.respond(embed=embed, file=file)
+    #         ctxlog.success("Sent display_queue successfully!")
+    #
+    #     except Exception as e:
+    #         ctxlog.error(f"Error in display_queue: {e}")
+    #         ctxlog.error(traceback.format_exc())
+    #         await ctx.respond("An error occurred while displaying the queue.")
 
     @commands.slash_command(
         name='shuffle', description='Shuffle all the remaining songs in the queue.'
