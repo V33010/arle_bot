@@ -266,6 +266,8 @@ class MusicYT(commands.Cog):
         self.loop_types = {}  # Dictionary to store loop state for each server
         self.playback_times = {}
         self.twenty_four_seven = {}
+        self.pause_timestamps = {}  # {guild_id: timestamp_in_seconds}
+
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
@@ -3621,6 +3623,119 @@ class MusicYT(commands.Cog):
             ctxlog.error(f'Error in 24x7 command for guild {guild_id}: {e}')
             ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while toggling 24/7 mode.')
+
+    @commands.slash_command(
+        name='reconnect',
+        description='Reconnect the bot to your voice channel after a disconnection',
+    )
+    async def reconnect(self, ctx: discord.ApplicationContext):
+        guild_id = ctx.guild.id
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used reconnect command in guild {guild_id}')
+
+        try:
+            # Check if user is in a voice channel
+            if ctx.author.voice is None:
+                await ctx.respond('You need to be in a voice channel to use this command!')
+                ctxlog.warning(
+                    f'User attempted to use reconnect without joining voice channel in guild {guild_id}'
+                )
+                return
+
+            # Check if bot thinks it's playing something
+            current_song = self.get_current_song(guild_id)
+            if not current_song:
+                await ctx.respond('No active playback session to reconnect to.')
+                ctxlog.warning(f'No active playback session in guild {guild_id}')
+                return
+
+            voice_channel = ctx.author.voice.channel
+
+            # Check permissions
+            permissions = voice_channel.permissions_for(ctx.guild.me)
+            if not permissions.connect or not permissions.speak:
+                await ctx.respond(
+                    "I don't have permission to join and speak in your voice channel!"
+                )
+                ctxlog.warning(f'Missing permissions for voice channel in guild {guild_id}')
+                return
+
+            try:
+                # Connect to voice channel
+                if ctx.voice_client:
+                    await ctx.voice_client.disconnect()
+                    ctxlog.info(f'Disconnected from existing voice client in guild {guild_id}')
+
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
+                ctxlog.info(f'Connected to voice channel in guild {guild_id}')
+
+                # Resume playback
+                current_url, current_title, current_duration = current_song
+                success = await self.play_audio(
+                    ctx,
+                    current_url,
+                    current_title,
+                    current_duration,
+                    after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                )
+
+                if success:
+                    embed = discord.Embed(
+                        title='🎵 Reconnected',
+                        description=f'Successfully reconnected to {voice_channel.name}',
+                        color=discord.Color.green(),
+                        timestamp=discord.utils.utcnow(),
+                    )
+
+                    embed.add_field(
+                        name='Now Playing',
+                        value=f'**{current_title}**\n`Duration:` {format_duration(current_duration)}',
+                        inline=False,
+                    )
+
+                    # Update voice channel status
+                    try:
+                        await voice_channel.set_status(status=f'{current_title}')
+                    except Exception as status_error:
+                        ctxlog.warning(f'Could not update status: {status_error}')
+
+                    await ctx.respond(embed=embed)
+                    ctxlog.success(
+                        f'Successfully reconnected and resumed playback in guild {guild_id}'
+                    )
+                else:
+                    raise Exception('Failed to resume playback')
+
+            except Exception as e:
+                ctxlog.error(f'Error during reconnection process: {e}')
+
+                # Cleanup on failure
+                try:
+                    if ctx.voice_client:
+                        await ctx.voice_client.disconnect()
+                except Exception:
+                    pass
+
+                await ctx.respond(
+                    'Failed to reconnect and resume playback. Please try again or use /play_music to start a new session.'
+                )
+
+        except Exception as e:
+            ctxlog.error(f'Error in reconnect command for guild {guild_id}: {e}')
+            ctxlog.error(traceback.format_exc())
+            await ctx.respond('An unexpected error occurred while trying to reconnect.')
+
+            # Log state for debugging
+            try:
+                queue_data = self.queue.get_queue(guild_id)
+                ctxlog.debug(
+                    f"Queue state for guild {guild_id}: "
+                    f"current_index={queue_data['current_index']}, "
+                    f"queue_length={len(queue_data['queue'])}"
+                )
+            except Exception as debug_error:
+                ctxlog.error(f'Error gathering debug information: {debug_error}')
 
 
 def setup(bot):
