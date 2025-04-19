@@ -811,6 +811,7 @@ class MusicYT(commands.Cog):
                     elapsed_time = int(time.time() - self.playback_times[guild_id])
                     current_timestamp = min(elapsed_time, total_duration)
                 else:
+                    ctxlog.info('guild_id not found in self.playback_times')
                     current_timestamp = 0
 
                 # Create embed for better presentation
