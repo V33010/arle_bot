@@ -1315,6 +1315,7 @@ class MusicYT(commands.Cog):
             ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while displaying the queue.')
 
+            
     @commands.slash_command(
         name='shuffle', description='Shuffle all the remaining songs in the queue.'
     )
