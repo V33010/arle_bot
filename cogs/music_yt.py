@@ -266,6 +266,8 @@ class MusicYT(commands.Cog):
         self.loop_types = {}  # Dictionary to store loop state for each server
         self.playback_times = {}
         self.twenty_four_seven = {}
+        self.pause_timestamps = {}  # {guild_id: timestamp_in_seconds}
+
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn -af "aresample=44100:filter_size=64:phase_shift=8"',
@@ -809,6 +811,7 @@ class MusicYT(commands.Cog):
                     elapsed_time = int(time.time() - self.playback_times[guild_id])
                     current_timestamp = min(elapsed_time, total_duration)
                 else:
+                    ctxlog.info('guild_id not found in self.playback_times')
                     current_timestamp = 0
 
                 # Create embed for better presentation
@@ -1311,110 +1314,6 @@ class MusicYT(commands.Cog):
             ctxlog.error(f'Error in display_queue: {e}')
             ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while displaying the queue.')
-
-    # @commands.slash_command(
-    #     name="display_queue",
-    #     description="Display the next 10 songs and total songs in queue",
-    # )
-    # async def display_queue(self, ctx: discord.ApplicationContext):
-    #     guild_id = ctx.guild.id
-    #     ctxlog = get_context_logger(ctx)
-    #     ctxlog.info(f"{ctx.author.name} used command display_queue in guild {guild_id}")
-    #
-    #     file = discord.File(
-    #         "image_assets/31e0895d-7eac-43a3-b926-9f4781c08435.webp",
-    #         filename="queue_image.webp",
-    #     )
-    #
-    #     queue_data = self.queue.get_queue(guild_id)
-    #     if len(queue_data["queue"]) == 0:
-    #         await ctx.respond("The queue is currently empty.")
-    #         return
-    #
-    #     try:
-    #         # Get current song info
-    #         current_song = self.get_current_song(guild_id)
-    #         current_title = current_song[1] if current_song else "Unknown"
-    #         current_duration = current_song[2] if current_song else 0
-    #         current_index = queue_data["current_index"]
-    #
-    #         # Get next songs
-    #         try:
-    #             next_songs = queue_data["queue"][
-    #                 queue_data["current_index"] + 1 : queue_data["current_index"] + 11
-    #             ]
-    #         except IndexError:
-    #             next_songs = queue_data["queue"][queue_data["current_index"] + 1 :]
-    #
-    #         # Create embed
-    #         embed = discord.Embed(
-    #             title="🎵 Queue Preview",
-    #             color=discord.Color.blue(),
-    #             timestamp=discord.utils.utcnow(),
-    #         )
-    #
-    #         # Add current song field
-    #         embed.add_field(
-    #             name="🔊 Now Playing",
-    #             value=f"**{current_title}**\n`Duration:` {format_duration(current_duration)}",
-    #             inline=False,
-    #         )
-    #
-    #         # Add separator
-    #         embed.add_field(name="⎯" * 50, value="", inline=False)
-    #
-    #         # Add upcoming songs
-    #         if next_songs:
-    #             upcoming_description = []
-    #             total_duration = 0
-    #             for i, (_, title, duration) in enumerate(next_songs, 1):
-    #                 total_duration += duration
-    #                 time_until = sum(song[2] for song in next_songs[: i - 1])
-    #                 upcoming_description.append(
-    #                     f"`{i}.` **{title}**\n"
-    #                     f"┗ Duration: {format_duration(duration)} • Plays in: {format_duration(time_until)}"
-    #                 )
-    #
-    #             embed.add_field(
-    #                 name="📋 Up Next",
-    #                 value="\n".join(upcoming_description) or "No upcoming songs",
-    #                 inline=False,
-    #             )
-    #         else:
-    #             embed.add_field(
-    #                 name="📋 Up Next", value="*No more songs in queue*", inline=False
-    #             )
-    #
-    #         # Add queue statistics
-    #         remaining_songs = len(queue_data["queue"]) - (current_index + 1)
-    #         total_remaining_duration = sum(
-    #             song[2] for song in queue_data["queue"][current_index + 1 :]
-    #         )
-    #
-    #         stats = (
-    #             f"**Songs Remaining:** {remaining_songs}\n"
-    #             f"**Total Duration:** {format_duration(total_remaining_duration)}\n"
-    #             f"**Songs Shown:** {len(next_songs)}/10"
-    #         )
-    #
-    #         embed.add_field(name="📊 Queue Stats", value=stats, inline=False)
-    #
-    #         # Set thumbnail
-    #         embed.set_thumbnail(url=("attachment://queue_image.webp"))
-    #
-    #         # Set footer with current position
-    #         embed.set_footer(
-    #             text=f"Currently Playing: {current_index + 1}/{len(queue_data['queue'])} • "
-    #             f"Queue length: {format_duration(total_remaining_duration)}"
-    #         )
-    #
-    #         await ctx.respond(embed=embed, file=file)
-    #         ctxlog.success("Sent display_queue successfully!")
-    #
-    #     except Exception as e:
-    #         ctxlog.error(f"Error in display_queue: {e}")
-    #         ctxlog.error(traceback.format_exc())
-    #         await ctx.respond("An error occurred while displaying the queue.")
 
     @commands.slash_command(
         name='shuffle', description='Shuffle all the remaining songs in the queue.'
@@ -3621,6 +3520,119 @@ class MusicYT(commands.Cog):
             ctxlog.error(f'Error in 24x7 command for guild {guild_id}: {e}')
             ctxlog.error(traceback.format_exc())
             await ctx.respond('An error occurred while toggling 24/7 mode.')
+
+    @commands.slash_command(
+        name='reconnect',
+        description='Reconnect the bot to your voice channel after a disconnection',
+    )
+    async def reconnect(self, ctx: discord.ApplicationContext):
+        guild_id = ctx.guild.id
+        ctxlog = get_context_logger(ctx)
+        ctxlog.info(f'{ctx.author.name} used reconnect command in guild {guild_id}')
+
+        try:
+            # Check if user is in a voice channel
+            if ctx.author.voice is None:
+                await ctx.respond('You need to be in a voice channel to use this command!')
+                ctxlog.warning(
+                    f'User attempted to use reconnect without joining voice channel in guild {guild_id}'
+                )
+                return
+
+            # Check if bot thinks it's playing something
+            current_song = self.get_current_song(guild_id)
+            if not current_song:
+                await ctx.respond('No active playback session to reconnect to.')
+                ctxlog.warning(f'No active playback session in guild {guild_id}')
+                return
+
+            voice_channel = ctx.author.voice.channel
+
+            # Check permissions
+            permissions = voice_channel.permissions_for(ctx.guild.me)
+            if not permissions.connect or not permissions.speak:
+                await ctx.respond(
+                    "I don't have permission to join and speak in your voice channel!"
+                )
+                ctxlog.warning(f'Missing permissions for voice channel in guild {guild_id}')
+                return
+
+            try:
+                # Connect to voice channel
+                if ctx.voice_client:
+                    await ctx.voice_client.disconnect()
+                    ctxlog.info(f'Disconnected from existing voice client in guild {guild_id}')
+
+                await voice_channel.connect()
+                await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
+                ctxlog.info(f'Connected to voice channel in guild {guild_id}')
+
+                # Resume playback
+                current_url, current_title, current_duration = current_song
+                success = await self.play_audio(
+                    ctx,
+                    current_url,
+                    current_title,
+                    current_duration,
+                    after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                )
+
+                if success:
+                    embed = discord.Embed(
+                        title='🎵 Reconnected',
+                        description=f'Successfully reconnected to {voice_channel.name}',
+                        color=discord.Color.green(),
+                        timestamp=discord.utils.utcnow(),
+                    )
+
+                    embed.add_field(
+                        name='Now Playing',
+                        value=f'**{current_title}**\n`Duration:` {format_duration(current_duration)}',
+                        inline=False,
+                    )
+
+                    # Update voice channel status
+                    try:
+                        await voice_channel.set_status(status=f'{current_title}')
+                    except Exception as status_error:
+                        ctxlog.warning(f'Could not update status: {status_error}')
+
+                    await ctx.respond(embed=embed)
+                    ctxlog.success(
+                        f'Successfully reconnected and resumed playback in guild {guild_id}'
+                    )
+                else:
+                    raise Exception('Failed to resume playback')
+
+            except Exception as e:
+                ctxlog.error(f'Error during reconnection process: {e}')
+
+                # Cleanup on failure
+                try:
+                    if ctx.voice_client:
+                        await ctx.voice_client.disconnect()
+                except Exception:
+                    pass
+
+                await ctx.respond(
+                    'Failed to reconnect and resume playback. Please try again or use /play_music to start a new session.'
+                )
+
+        except Exception as e:
+            ctxlog.error(f'Error in reconnect command for guild {guild_id}: {e}')
+            ctxlog.error(traceback.format_exc())
+            await ctx.respond('An unexpected error occurred while trying to reconnect.')
+
+            # Log state for debugging
+            try:
+                queue_data = self.queue.get_queue(guild_id)
+                ctxlog.debug(
+                    f"Queue state for guild {guild_id}: "
+                    f"current_index={queue_data['current_index']}, "
+                    f"queue_length={len(queue_data['queue'])}"
+                )
+            except Exception as debug_error:
+                ctxlog.error(f'Error gathering debug information: {debug_error}')
 
 
 def setup(bot):
