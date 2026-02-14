@@ -13,7 +13,7 @@ dependencies = [
     "mutagen>=1.47.0",
     "pillow>=11.1.0",
     "pre-commit>=4.0.1",
-    "py-cord>=2.6.1",
+    "py-cord>=2.7.1",
     "pydantic>=2.10.5",
     "pydub>=0.25.1",
     "pynacl>=1.5.0",
@@ -24,7 +24,7 @@ dependencies = [
     "selenium>=4.27.1",
     "spotipy>=2.25.0",
     "typer>=0.15.1",
-    "yt-dlp>=2025.6.9",
+    "yt-dlp>=2026.2.4",
 ]
 [tool.ruff]
 line-length = 100

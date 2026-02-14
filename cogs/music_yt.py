@@ -267,6 +267,7 @@ class MusicYT(commands.Cog):
         self.playback_times = {}
         self.twenty_four_seven = {}
         self.pause_timestamps = {}  # {guild_id: timestamp_in_seconds}
+        self.cached_queues = {}
 
         self.FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -338,6 +339,19 @@ class MusicYT(commands.Cog):
     def get_current_song(self, guild_id):
         """Get current song for specific server"""
         return self.queue.current_song(guild_id)
+
+    def cache_queue(self, guild_id):
+        queue_data = self.queue.get_queue(guild_id).copy()
+        self.cached_queues[guild_id] = queue_data
+
+    def get_current_song_index(self, guild_id):
+        all_songs = self.queue.get_loaded_songs(guild_id) + self.queue.get_temp_queue_songs(
+            guild_id
+        )
+        current_song = self.get_current_song(guild_id)
+        if current_song:
+            return all_songs.index((1, current_song[1], current_song[2]))
+        return -1
 
     def _fetch_youtube_url_sync(self, query, guild_id):
         """Synchronous version of fetch_youtube_url to run in thread pool"""
@@ -984,128 +998,144 @@ class MusicYT(commands.Cog):
             except Exception as cleanup_error:
                 ctxlog.error(f'Error during cleanup: {cleanup_error}')
 
-    @commands.slash_command(name='pause', description='Pause the current song.')
-    async def pause(self, ctx: discord.ApplicationContext):
-        guild_id = ctx.guild.id
-        if guild_id in self.playback_times:
-            self.playback_times[guild_id] = self.playback_times[guild_id] - time.time()
-        ctxlog = get_context_logger(ctx)
-        ctxlog.info(f'{ctx.author.name} used command pause in guild {guild_id}')
-
-        try:
-            if ctx.voice_client is None or not ctx.voice_client.is_playing():
-                ctxlog.warning(f'No music playing in guild {guild_id}')
-                await ctx.respond('No music playing.')
-                return
-
-            # Get current song info for better user feedback
-            current_song = self.get_current_song(guild_id)
-            if current_song:
-                current_title = current_song[1]
-                ctx.voice_client.pause()
-                await ctx.respond(f'Paused: {current_title}')
-
-                # Update voice channel status if applicable
-                try:
-                    voice_channel = ctx.author.voice.channel
-                    await voice_channel.set_status(status=f'⏸️ {current_title}')
-                except Exception as status_error:
-                    ctxlog.warning(f'Could not update status: {status_error}')
-
-                ctxlog.success(f'Paused music playback in guild {guild_id}: {current_title}')
-            else:
-                await ctx.respond('No music currently playing.')
-                ctxlog.warning(f'No current song found in guild {guild_id}')
-
-        except Exception as e:
-            ctxlog.error(f'Error in pause command for guild {guild_id}: {e}')
-            await ctx.respond('An error occurred while trying to pause the music.')
-
-            # Attempt to recover playback state if needed
-            try:
-                if ctx.voice_client and ctx.voice_client.is_playing():
-                    ctx.voice_client.pause()
-                    ctxlog.info(f'Recovered pause state for guild {guild_id}')
-            except Exception as recovery_error:
-                ctxlog.error(f'Error during state recovery: {recovery_error}')
-
-    @commands.slash_command(name='resume', description='Resume playing the paused song.')
-    async def play(self, ctx: discord.ApplicationContext):
-        guild_id = ctx.guild.id
-        if guild_id in self.playback_times and isinstance(self.playback_times[guild_id], float):
-            self.playback_times[guild_id] = (
-                time.time() + self.playback_times[guild_id]
-            )  # Restore the elapsed time
-        ctxlog = get_context_logger(ctx)
-        ctxlog.info(f'{ctx.author.name} used command resume in guild {guild_id}')
-
-        try:
-            if ctx.voice_client is None:
-                await ctx.respond('No music queued.')
-                ctxlog.warning(f'Tried using resume command for an empty queue in guild {guild_id}')
-                return
-
-            if ctx.voice_client.is_playing():
-                current_song = self.get_current_song(guild_id)
-                current_title = current_song[1] if current_song else 'Unknown'
-                ctxlog.warning(
-                    f'Tried using resume command while music playback is active in guild {guild_id}'
-                    f' (Currently playing: {current_title})'
-                )
-                await ctx.respond(f'Music already playing: {current_title}')
-                return
-
-            if ctx.voice_client.is_paused():
-                current_song = self.get_current_song(guild_id)
-                if current_song:
-                    current_title = current_song[1]
-                    duration = current_song[2]
-
-                    ctx.voice_client.resume()
-                    await ctx.respond(
-                        f'Resumed playing: {current_title} ({format_duration(duration)})'
-                    )
-
-                    # Update voice channel status
-                    try:
-                        voice_channel = ctx.author.voice.channel
-                        await voice_channel.set_status(status=f'▶️ {current_title}')
-                    except Exception as status_error:
-                        ctxlog.warning(f'Could not update status: {status_error}')
-
-                    ctxlog.success(f'Resumed music playback in guild {guild_id}: {current_title}')
-                else:
-                    await ctx.respond('Error: No song information found.')
-                    ctxlog.error(f'No current song information found for guild {guild_id}')
-            else:
-                queue_data = self.queue.get_queue(guild_id)
-                if len(queue_data['queue']) > 0:
-                    await ctx.respond('No song is paused. Use /play_music to start playing.')
-                    ctxlog.warning(f'Queue exists but no song is paused in guild {guild_id}')
-                else:
-                    await ctx.respond('No music queued.')
-                    ctxlog.warning(f'No music in queue for guild {guild_id}')
-
-        except Exception as e:
-            ctxlog.error(f'Error in resume command for guild {guild_id}: {e}')
-            await ctx.respond('An error occurred while trying to resume the music.')
-
-            # Attempt to recover playback state if needed
-            try:
-                if ctx.voice_client and ctx.voice_client.is_paused():
-                    ctx.voice_client.resume()
-                    ctxlog.info(f'Recovered resume state for guild {guild_id}')
-            except Exception as recovery_error:
-                ctxlog.error(f'Error during state recovery: {recovery_error}')
-
-            # Check queue state
-            try:
-                queue_data = self.queue.get_queue(guild_id)
-                if queue_data['current_index'] >= len(queue_data['queue']):
-                    queue_data['current_index'] = len(queue_data['queue']) - 1
-                    ctxlog.info(f'Recovered queue index state for guild {guild_id}')
-            except Exception as queue_error:
-                ctxlog.error(f'Error during queue state recovery: {queue_error}')
+    # @commands.slash_command(name="pause", description="Pause the current song.")
+    # async def pause(self, ctx: discord.ApplicationContext):
+    #     guild_id = ctx.guild.id
+    #     if guild_id in self.playback_times:
+    #         self.playback_times[guild_id] = self.playback_times[guild_id] - time.time()
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(f"{ctx.author.name} used command pause in guild {guild_id}")
+    #
+    #     try:
+    #         if ctx.voice_client is None or not ctx.voice_client.is_playing():
+    #             ctxlog.warning(f"No music playing in guild {guild_id}")
+    #             await ctx.respond("No music playing.")
+    #             return
+    #
+    #         # Get current song info for better user feedback
+    #         current_song = self.get_current_song(guild_id)
+    #         if current_song:
+    #             current_title = current_song[1]
+    #             ctx.voice_client.pause()
+    #             await ctx.respond(f"Paused: {current_title}")
+    #
+    #             # Update voice channel status if applicable
+    #             try:
+    #                 voice_channel = ctx.author.voice.channel
+    #                 await voice_channel.set_status(status=f"⏸️ {current_title}")
+    #             except Exception as status_error:
+    #                 ctxlog.warning(f"Could not update status: {status_error}")
+    #
+    #             ctxlog.success(
+    #                 f"Paused music playback in guild {guild_id}: {current_title}"
+    #             )
+    #         else:
+    #             await ctx.respond("No music currently playing.")
+    #             ctxlog.warning(f"No current song found in guild {guild_id}")
+    #
+    #     except Exception as e:
+    #         ctxlog.error(f"Error in pause command for guild {guild_id}: {e}")
+    #         await ctx.respond("An error occurred while trying to pause the music.")
+    #
+    #         # Attempt to recover playback state if needed
+    #         try:
+    #             if ctx.voice_client and ctx.voice_client.is_playing():
+    #                 ctx.voice_client.pause()
+    #                 ctxlog.info(f"Recovered pause state for guild {guild_id}")
+    #         except Exception as recovery_error:
+    #             ctxlog.error(f"Error during state recovery: {recovery_error}")
+    #
+    # @commands.slash_command(
+    #     name="resume", description="Resume playing the paused song."
+    # )
+    # async def play(self, ctx: discord.ApplicationContext):
+    #     guild_id = ctx.guild.id
+    #     if guild_id in self.playback_times and isinstance(
+    #         self.playback_times[guild_id], float
+    #     ):
+    #         self.playback_times[guild_id] = (
+    #             time.time() + self.playback_times[guild_id]
+    #         )  # Restore the elapsed time
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(f"{ctx.author.name} used command resume in guild {guild_id}")
+    #
+    #     try:
+    #         if ctx.voice_client is None:
+    #             await ctx.respond("No music queued.")
+    #             ctxlog.warning(
+    #                 f"Tried using resume command for an empty queue in guild {guild_id}"
+    #             )
+    #             return
+    #
+    #         if ctx.voice_client.is_playing():
+    #             current_song = self.get_current_song(guild_id)
+    #             current_title = current_song[1] if current_song else "Unknown"
+    #             ctxlog.warning(
+    #                 f"Tried using resume command while music playback is active in guild {guild_id}"
+    #                 f" (Currently playing: {current_title})"
+    #             )
+    #             await ctx.respond(f"Music already playing: {current_title}")
+    #             return
+    #
+    #         if ctx.voice_client.is_paused():
+    #             current_song = self.get_current_song(guild_id)
+    #             if current_song:
+    #                 current_title = current_song[1]
+    #                 duration = current_song[2]
+    #
+    #                 ctx.voice_client.resume()
+    #                 await ctx.respond(
+    #                     f"Resumed playing: {current_title} ({format_duration(duration)})"
+    #                 )
+    #
+    #                 # Update voice channel status
+    #                 try:
+    #                     voice_channel = ctx.author.voice.channel
+    #                     await voice_channel.set_status(status=f"▶️ {current_title}")
+    #                 except Exception as status_error:
+    #                     ctxlog.warning(f"Could not update status: {status_error}")
+    #
+    #                 ctxlog.success(
+    #                     f"Resumed music playback in guild {guild_id}: {current_title}"
+    #                 )
+    #             else:
+    #                 await ctx.respond("Error: No song information found.")
+    #                 ctxlog.error(
+    #                     f"No current song information found for guild {guild_id}"
+    #                 )
+    #         else:
+    #             queue_data = self.queue.get_queue(guild_id)
+    #             if len(queue_data["queue"]) > 0:
+    #                 await ctx.respond(
+    #                     "No song is paused. Use /play_music to start playing."
+    #                 )
+    #                 ctxlog.warning(
+    #                     f"Queue exists but no song is paused in guild {guild_id}"
+    #                 )
+    #             else:
+    #                 await ctx.respond("No music queued.")
+    #                 ctxlog.warning(f"No music in queue for guild {guild_id}")
+    #
+    #     except Exception as e:
+    #         ctxlog.error(f"Error in resume command for guild {guild_id}: {e}")
+    #         await ctx.respond("An error occurred while trying to resume the music.")
+    #
+    #         # Attempt to recover playback state if needed
+    #         try:
+    #             if ctx.voice_client and ctx.voice_client.is_paused():
+    #                 ctx.voice_client.resume()
+    #                 ctxlog.info(f"Recovered resume state for guild {guild_id}")
+    #         except Exception as recovery_error:
+    #             ctxlog.error(f"Error during state recovery: {recovery_error}")
+    #
+    #         # Check queue state
+    #         try:
+    #             queue_data = self.queue.get_queue(guild_id)
+    #             if queue_data["current_index"] >= len(queue_data["queue"]):
+    #                 queue_data["current_index"] = len(queue_data["queue"]) - 1
+    #                 ctxlog.info(f"Recovered queue index state for guild {guild_id}")
+    #         except Exception as queue_error:
+    #             ctxlog.error(f"Error during queue state recovery: {queue_error}")
 
     @commands.slash_command(name='stop', description='Stop the music and clear the queue.')
     async def stop(self, ctx: discord.ApplicationContext):
