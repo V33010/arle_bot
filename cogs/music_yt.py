@@ -284,6 +284,10 @@ class MusicYT(commands.Cog):
             'nocheckcertificate': True,
             'buffersize': 16384,
             'format_sort': ['abr'],
+            'js_runtimes': {'node': {}},
+            # "username": "oauth2",
+            # "password": "",
+            'cookiesfrombrowser': ('firefox',),
             # "cookiefile": cookies_path,  # NOTE: Comment out this line when not using cookies. Cookies to be stored in cookies/cookies.txt
         }
         self.youtube_api_key = youtube_api_key
@@ -651,7 +655,7 @@ class MusicYT(commands.Cog):
             # Handle voice client connection
             try:
                 if ctx.voice_client is None:
-                    await voice_channel.connect()
+                    await voice_channel.connect(timeout=10.0, reconnect=True)
                     await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
                     # If 24/7 mode was enabled but bot disconnected, re-enable it
                     if guild_id in self.twenty_four_seven:
@@ -1574,27 +1578,34 @@ class MusicYT(commands.Cog):
             ctxlog.info(f'Added all songs to the temp queue from playlist: {playlist_name}')
             total_songs = len(songs)
 
-            # Connect to voice channel if needed
+            # --- NEW LOGIC: Fetch the first song BEFORE connecting to voice ---
+            first_song_data = None
+            if not ctx.voice_client or not ctx.voice_client.is_playing():
+                first_song_title = self.queue.get_next_temp_songs(guild_id, 1)[0]
+                ctxlog.info(f'First song: {first_song_title}')
+
+                # Run yt-dlp first
+                url, title, duration = await self.fetch_youtube_url(first_song_title, guild_id)
+                if url:
+                    first_song_data = (url, title, duration)
+
+            # NOW connect to the voice channel
             if ctx.voice_client is None:
-                await voice_channel.connect()
+                await voice_channel.connect(timeout=10.0, reconnect=True)
                 await asyncio.sleep(0.5)
 
-            # Process first song immediately if nothing is playing
-            if not ctx.voice_client.is_playing():
-                first_song = self.queue.get_next_temp_songs(guild_id, 1)[0]
-                ctxlog.info(f'First song: {first_song}')
-                url, title, duration = await self.fetch_youtube_url(first_song, guild_id)
-
-                if url:
-                    self.queue.add_song(guild_id, (url, title, duration))
-                    ctx.voice_client.play(
-                        discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
-                        after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
-                    )
-                    self.playback_times[guild_id] = time.time()
-                    await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
-                    await voice_channel.set_status(status=f'▶️ {title}')
-                    ctxlog.success(f'Started playing: {title}')
+            # Play the fetched song
+            if first_song_data and ctx.voice_client and not ctx.voice_client.is_playing():
+                url, title, duration = first_song_data
+                self.queue.add_song(guild_id, (url, title, duration))
+                ctx.voice_client.play(
+                    discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+                    after=lambda e: self.bot.loop.create_task(self.play_next_song(ctx)),
+                )
+                self.playback_times[guild_id] = time.time()
+                await ctx.send(f'Now playing: {title} ({format_duration(duration)})')
+                await voice_channel.set_status(status=f'▶️ {title}')
+                ctxlog.success(f'Started playing: {title}')
 
             # Process initial batch of songs concurrently
             initial_songs = self.queue.get_next_temp_songs(guild_id, self.INITIAL_SONGS_TO_LOAD)
@@ -1621,6 +1632,109 @@ class MusicYT(commands.Cog):
             error_msg = f'Error processing playlist: {str(e)}'
             ctxlog.error(error_msg)
             await ctx.respond(error_msg)
+
+    #
+    # @commands.slash_command(
+    #     name="play_playlist", description="Play songs from a playlist file"
+    # )
+    # async def play_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
+    #     guild_id = ctx.guild.id
+    #     ctxlog = get_context_logger(ctx)
+    #     ctxlog.info(
+    #         f"{ctx.author.name} used play_playlist command with playlist: {playlist_name}"
+    #     )
+    #     await ctx.defer()
+    #
+    #     if ctx.author.voice is None:
+    #         ctxlog.warning(
+    #             "Attempted to use play_playlist command without joining voice channel."
+    #         )
+    #         await ctx.respond("You need to join a voice channel first.")
+    #         return
+    #
+    #     voice_channel = ctx.author.voice.channel
+    #     playlist_path = os.path.join(self.playlists_dir, f"{playlist_name}.txt")
+    #
+    #     if not os.path.exists(playlist_path):
+    #         await ctx.respond(f"Playlist '{playlist_name}' doesn't exist.")
+    #         ctxlog.warning(f"Playlist not found: {playlist_path}")
+    #         return
+    #     ctxlog.info("Playlist path established")
+    #     try:
+    #         with open(playlist_path, "r", encoding="utf-8") as file:
+    #             songs = [line.strip() for line in file if line.strip()]
+    #
+    #         if not songs:
+    #             await ctx.respond(f"Playlist '{playlist_name}' is empty.")
+    #             return
+    #
+    #         # Add all songs to temp queue for this specific server
+    #         random.shuffle(songs)
+    #         self.queue.add_to_temp_queue(guild_id, songs)
+    #         ctxlog.info(
+    #             f"Added all songs to the temp queue from playlist: {playlist_name}"
+    #         )
+    #         total_songs = len(songs)
+    #
+    #         # Connect to voice channel if needed
+    #         if ctx.voice_client is None:
+    #             await voice_channel.connect(timeout=10.0, reconnect=True)
+    #             await asyncio.sleep(0.5)
+    #
+    #         # Process first song immediately if nothing is playing
+    #         if not ctx.voice_client.is_playing():
+    #             first_song = self.queue.get_next_temp_songs(guild_id, 1)[0]
+    #             ctxlog.info(f"First song: {first_song}")
+    #             url, title, duration = await self.fetch_youtube_url(
+    #                 first_song, guild_id
+    #             )
+    #
+    #             if url:
+    #                 self.queue.add_song(guild_id, (url, title, duration))
+    #                 ctx.voice_client.play(
+    #                     discord.FFmpegPCMAudio(url, **self.FFMPEG_OPTIONS),
+    #                     after=lambda e: self.bot.loop.create_task(
+    #                         self.play_next_song(ctx)
+    #                     ),
+    #                 )
+    #                 self.playback_times[guild_id] = time.time()
+    #                 await ctx.send(
+    #                     f"Now playing: {title} ({format_duration(duration)})"
+    #                 )
+    #                 await voice_channel.set_status(status=f"▶️ {title}")
+    #                 ctxlog.success(f"Started playing: {title}")
+    #
+    #         # Process initial batch of songs concurrently
+    #         initial_songs = self.queue.get_next_temp_songs(
+    #             guild_id, self.INITIAL_SONGS_TO_LOAD
+    #         )
+    #         await ctx.respond(
+    #             f'Loading playlist: "{playlist_name}" with {total_songs} songs.'
+    #         )
+    #
+    #         # Fetch initial songs concurrently
+    #         fetch_tasks = [
+    #             self.fetch_youtube_url(song, guild_id) for song in initial_songs
+    #         ]
+    #         results = await asyncio.gather(*fetch_tasks)
+    #
+    #         processed_count = 0
+    #         for url, title, duration in results:
+    #             if url:
+    #                 self.queue.add_song(guild_id, (url, title, duration))
+    #                 processed_count += 1
+    #                 ctxlog.info(f"Added to queue: {title}")
+    #
+    #         remaining = self.queue.get_temp_queue_size(guild_id)
+    #         await ctx.send(
+    #             f"Added {processed_count} songs to queue. {remaining} songs remaining in playlist '{playlist_name}'. "
+    #             f"More songs will be added automatically as the playlist progresses."
+    #         )
+    #
+    #     except Exception as e:
+    #         error_msg = f"Error processing playlist: {str(e)}"
+    #         ctxlog.error(error_msg)
+    #         await ctx.respond(error_msg)
 
     @commands.slash_command(name='create_playlist', description='Create a new empty playlist')
     async def create_playlist(self, ctx: discord.ApplicationContext, playlist_name: str):
@@ -2813,7 +2927,7 @@ class MusicYT(commands.Cog):
 
                 # Connect to voice channel if needed
                 if ctx.voice_client is None:
-                    await voice_channel.connect()
+                    await voice_channel.connect(timeout=10.0, reconnect=True)
                     await asyncio.sleep(0.5)
 
                 # Process first song immediately if nothing is playing
@@ -3107,7 +3221,7 @@ class MusicYT(commands.Cog):
 
                 # Connect to voice channel if needed
                 if ctx.voice_client is None:
-                    await voice_channel.connect()
+                    await voice_channel.connect(timeout=10.0, reconnect=True)
                     await asyncio.sleep(0.5)
 
                 # Process first song immediately if nothing is playing
@@ -3412,7 +3526,7 @@ class MusicYT(commands.Cog):
 
                 # Connect to voice channel if needed
                 if ctx.voice_client is None:
-                    await voice_channel.connect()
+                    await voice_channel.connect(timeout=10.0, reconnect=True)
                     await asyncio.sleep(0.5)
 
                 # Process first song immediately if nothing is playing
@@ -3593,7 +3707,7 @@ class MusicYT(commands.Cog):
                     await ctx.voice_client.disconnect()
                     ctxlog.info(f'Disconnected from existing voice client in guild {guild_id}')
 
-                await voice_channel.connect()
+                await voice_channel.connect(timeout=10.0, reconnect=True)
                 await asyncio.sleep(0.5)  # Small delay to ensure connection is stable
                 ctxlog.info(f'Connected to voice channel in guild {guild_id}')
 
